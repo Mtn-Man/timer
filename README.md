@@ -1,6 +1,6 @@
 # Timer
 
-A simple countdown timer utility for the command line with visual feedback and audio alerts.
+A simple countdown timer utility for the macOS command line with visual feedback and audio alerts.
 
 ## Features
 
