@@ -153,7 +153,6 @@ func playAlarmAttempts(commands []alarmCommand, attempts int, interval time.Dura
 		played := false
 
 		for idx := 0; idx < len(commands); {
-			// Alarm is best effort by design; failures stay silent to avoid noisy UX.
 			if err := runner(commands[idx]); err == nil {
 				played = true
 				break
