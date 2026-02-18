@@ -61,7 +61,7 @@ func main() {
 
 	if err := runTimer(ctx, duration); err != nil {
 		fmt.Print("\r\033[K")
-		fmt.Println("Timer cancelled")
+		fmt.Println("timer cancelled")
 		os.Exit(130)
 	}
 }
@@ -103,7 +103,7 @@ func runTimer(ctx context.Context, duration time.Duration) error {
 
 			if remaining <= 0 {
 				fmt.Print("\r\033[K")
-				fmt.Println("Timer Complete")
+				fmt.Println("timer complete")
 				startAlarmProcess()
 
 				return nil
