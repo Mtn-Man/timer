@@ -6,7 +6,7 @@ package main
 //
 // Features:
 // - Live countdown display in stdout and terminal title bar
-// - Graceful cancellation via Ctrl+C with title restoration
+// - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
 // - Prevent sleep on macOS while timer is active
@@ -60,9 +60,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := runTimer(ctx, duration); err != nil {
-		fmt.Print("\r\033[K")
-		fmt.Println("timer cancelled")
+	interactive := stdoutIsTTY()
+
+	if err := runTimer(ctx, duration, interactive); err != nil {
+		if interactive {
+			fmt.Print("\r\033[K")
+			fmt.Println("timer cancelled")
+		}
 		os.Exit(130)
 	}
 }
@@ -86,7 +90,7 @@ func parseRequestedDuration(args []string) (time.Duration, error) {
 	return duration, nil
 }
 
-func runTimer(ctx context.Context, duration time.Duration) error {
+func runTimer(ctx context.Context, duration time.Duration, interactive bool) error {
 	var sleepInhibitor *exec.Cmd
 	if runtime.GOOS == "darwin" {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
@@ -103,23 +107,36 @@ func runTimer(ctx context.Context, duration time.Duration) error {
 	}
 
 	deadline := time.Now().Add(duration)
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	done := time.NewTimer(duration)
+	defer done.Stop()
+
+	var tickC <-chan time.Time
+	if interactive {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		tickC = ticker.C
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case <-ticker.C:
+		case <-done.C:
+			if interactive {
+				fmt.Print("\r\033[K")
+			}
+			fmt.Println("timer complete")
+			if interactive {
+				startAlarmProcess()
+			}
+			return nil
+
+		case <-tickC:
 			remaining := time.Until(deadline)
 
 			if remaining <= 0 {
-				fmt.Print("\r\033[K")
-				fmt.Println("timer complete")
-				startAlarmProcess()
-
-				return nil
+				continue
 			}
 
 			// Ceiling-based calculation for whole seconds
@@ -133,9 +150,18 @@ func runTimer(ctx context.Context, duration time.Duration) error {
 
 			// Update title bar and terminal line in a single operation
 			// \033]0; sets title, \007 terminates the OSC sequence, \r returns to start of line
-			fmt.Printf("\033]0;%s\007\r%s", timeStr, timeStr)
+			fmt.Printf("\033]0;%s\007\r\033[K%s", timeStr, timeStr)
 		}
 	}
+}
+
+func stdoutIsTTY() bool {
+	fileInfo, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 // startAlarmProcess launches a detached child process that plays alert audio.

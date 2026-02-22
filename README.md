@@ -48,6 +48,8 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 The timer updates every 500ms, displaying the remaining time in `HH:MM:SS` format. The countdown appears both in your terminal output and in the terminal window's title bar. When the timer completes, it plays the system "Submarine" sound four times and displays "Timer Complete".
 
+When stdout is not a TTY (for example, redirected or piped), the timer switches to a quiet mode: it does not emit countdown/title updates or alarm audio, and prints a single `timer complete` line when done.
+
 Press Ctrl+C at any time to cancel the timer gracefully.
 
 ## License
