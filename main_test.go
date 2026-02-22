@@ -117,6 +117,110 @@ func TestParseRequestedDuration(t *testing.T) {
 	}
 }
 
+func TestParseInvocation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		args         []string
+		wantMode     invocationMode
+		wantDuration time.Duration
+		wantErr      error
+	}{
+		{
+			name:     "help short flag",
+			args:     []string{"timer", "-h"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "help long flag",
+			args:     []string{"timer", "--help"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "help flag wins with extra args",
+			args:     []string{"timer", "--help", "10s"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "version short flag",
+			args:     []string{"timer", "-v"},
+			wantMode: modeVersion,
+		},
+		{
+			name:     "version long flag",
+			args:     []string{"timer", "--version"},
+			wantMode: modeVersion,
+		},
+		{
+			name:     "version flag wins with extra args",
+			args:     []string{"timer", "--version", "10s"},
+			wantMode: modeVersion,
+		},
+		{
+			name:     "help takes precedence over version",
+			args:     []string{"timer", "--help", "--version"},
+			wantMode: modeHelp,
+		},
+		{
+			name:    "unknown short flag is usage error",
+			args:    []string{"timer", "-x"},
+			wantErr: errUsage,
+		},
+		{
+			name:    "unknown long flag is usage error",
+			args:    []string{"timer", "--wat"},
+			wantErr: errUsage,
+		},
+		{
+			name:    "usage when no duration arg",
+			args:    []string{"timer"},
+			wantErr: errUsage,
+		},
+		{
+			name:         "valid duration invocation",
+			args:         []string{"timer", "1s"},
+			wantMode:     modeRun,
+			wantDuration: 1 * time.Second,
+		},
+		{
+			name:    "invalid duration format",
+			args:    []string{"timer", "abc"},
+			wantErr: errInvalidDuration,
+		},
+		{
+			name:    "negative duration remains duration validation error",
+			args:    []string{"timer", "-1s"},
+			wantErr: errDurationMustBeOver,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotMode, gotDuration, err := parseInvocation(tc.args)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("parseInvocation() error = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("parseInvocation() unexpected error = %v", err)
+			}
+			if gotMode != tc.wantMode {
+				t.Fatalf("parseInvocation() mode = %v, want %v", gotMode, tc.wantMode)
+			}
+			if gotDuration != tc.wantDuration {
+				t.Fatalf("parseInvocation() duration = %v, want %v", gotDuration, tc.wantDuration)
+			}
+		})
+	}
+}
+
 func TestAlarmCandidatesForGOOS(t *testing.T) {
 	t.Parallel()
 

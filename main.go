@@ -25,6 +25,11 @@ import (
 )
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
+const (
+	appVersion = "v1.0"
+	usageText  = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
+	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit"
+)
 
 var (
 	errUsage              = errors.New("usage")
@@ -37,15 +42,23 @@ type alarmCommand struct {
 	args []string
 }
 
+type invocationMode int
+
+const (
+	modeRun invocationMode = iota
+	modeHelp
+	modeVersion
+)
+
 func main() {
 	if shouldRunInternalAlarm(os.Args, os.Getenv(internalAlarmEnv)) {
 		runAlarmWorker()
 		return
 	}
 
-	duration, err := parseRequestedDuration(os.Args)
+	mode, duration, err := parseInvocation(os.Args)
 	if errors.Is(err, errUsage) {
-		fmt.Fprintln(os.Stderr, "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h")
+		fmt.Fprintln(os.Stderr, usageText)
 		os.Exit(1)
 	}
 	if errors.Is(err, errInvalidDuration) {
@@ -55,6 +68,14 @@ func main() {
 	if errors.Is(err, errDurationMustBeOver) {
 		fmt.Fprintln(os.Stderr, "Error: duration must be > 0")
 		os.Exit(1)
+	}
+	if mode == modeHelp {
+		fmt.Println(helpText)
+		return
+	}
+	if mode == modeVersion {
+		fmt.Printf("timer %s\n", appVersion)
+		return
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -88,6 +109,52 @@ func parseRequestedDuration(args []string) (time.Duration, error) {
 		return 0, errDurationMustBeOver
 	}
 	return duration, nil
+}
+
+func parseInvocation(args []string) (invocationMode, time.Duration, error) {
+	if len(args) == 0 {
+		return modeRun, 0, errUsage
+	}
+
+	containsHelp := false
+	containsVersion := false
+
+	for _, arg := range args[1:] {
+		switch arg {
+		case "-h", "--help":
+			containsHelp = true
+		case "-v", "--version":
+			containsVersion = true
+		}
+	}
+
+	if containsHelp {
+		return modeHelp, 0, nil
+	}
+	if containsVersion {
+		return modeVersion, 0, nil
+	}
+
+	for _, arg := range args[1:] {
+		if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
+			return modeRun, 0, errUsage
+		}
+	}
+
+	duration, err := parseRequestedDuration(args)
+	if err != nil {
+		return modeRun, 0, err
+	}
+	return modeRun, duration, nil
+}
+
+func isPotentialNegativeDuration(arg string) bool {
+	if len(arg) < 2 || arg[0] != '-' {
+		return false
+	}
+
+	next := arg[1]
+	return (next >= '0' && next <= '9') || next == '.'
 }
 
 func runTimer(ctx context.Context, duration time.Duration, interactive bool) error {
