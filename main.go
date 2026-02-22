@@ -9,6 +9,7 @@ package main
 // - Graceful cancellation via Ctrl+C with title restoration
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
+// - Prevent sleep on macOS while timer is active
 
 import (
 	"context"
@@ -104,9 +105,6 @@ func runTimer(ctx context.Context, duration time.Duration) error {
 	deadline := time.Now().Add(duration)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
-
-	// Defer restoration of the terminal title bar upon exit
-	defer fmt.Print("\033]0;Terminal\007")
 
 	for {
 		select {
