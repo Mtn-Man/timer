@@ -86,6 +86,21 @@ func parseRequestedDuration(args []string) (time.Duration, error) {
 }
 
 func runTimer(ctx context.Context, duration time.Duration) error {
+	var sleepInhibitor *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		sleepInhibitor = quietCmd("caffeinate", "-i")
+		if err := sleepInhibitor.Start(); err != nil {
+			sleepInhibitor = nil
+		} else {
+			defer func() {
+				if sleepInhibitor.Process != nil {
+					_ = sleepInhibitor.Process.Kill()
+				}
+				_ = sleepInhibitor.Wait()
+			}()
+		}
+	}
+
 	deadline := time.Now().Add(duration)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
