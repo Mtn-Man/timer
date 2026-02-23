@@ -94,6 +94,8 @@ func main() {
 	}
 }
 
+// shouldRunInternalAlarm reports whether to run as an internal alarm worker.
+// The args check distinguishes a worker invocation from a user invocation that inherits the env var.
 func shouldRunInternalAlarm(args []string, envValue string) bool {
 	return envValue == "1" && len(args) == 1
 }
@@ -243,6 +245,7 @@ func stdoutIsTTY() bool {
 
 // startAlarmProcess launches a detached child process that plays alert audio.
 // The parent does not wait so the prompt returns immediately on completion.
+// Alarm is best-effort; silently skip if we can't locate the executable.
 func startAlarmProcess() {
 	exe, err := os.Executable()
 	if err != nil {
@@ -260,6 +263,8 @@ func runAlarmWorker() {
 	playAlarmAttempts(resolveAlarmCommands(), 4, 100*time.Millisecond, runAlarmCommand)
 }
 
+// playAlarmAttempts plays a sound up to attempts times, removing any backend that fails.
+// interval is the pause after each sound completes, not between start times.
 func playAlarmAttempts(commands []alarmCommand, attempts int, interval time.Duration, runner func(alarmCommand) error) {
 	if len(commands) == 0 {
 		return
