@@ -10,7 +10,7 @@ package main
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
 // - Prevent sleep on macOS while timer is active
-// - Quiet mode for non-TTY usage (similar to sleep but with best-effort caffeinate)
+// - Non-TTY-safe behavior: disables interactive UI/alerts; prints a single completion line
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
-	appVersion = "v1.0"
+	appVersion = "v1.0.0"
 	usageText  = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
 	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit"
 )
