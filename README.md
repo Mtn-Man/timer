@@ -39,7 +39,7 @@ timer 5m       # 5 minutes
 timer 1.5h     # 1.5 hours
 timer 90m      # 90 minutes
 timer --help   # Show help
-timer -v       # Show version (timer v1.0)
+timer -v       # Show version (timer v1.0.0)
 ```
 
 The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
@@ -47,7 +47,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 ### Flags
 
 - `-h`, `--help`: Show help and exit
-- `-v`, `--version`: Show version (`timer v1.0`) and exit
+- `-v`, `--version`: Show version (`timer v1.0.0`) and exit
 
 ## Requirements
 
