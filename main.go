@@ -10,6 +10,7 @@ package main
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
 // - Prevent sleep on macOS while timer is active
+// - Quiet mode for non-TTY usage (similar to sleep but with best-effort caffeinate)
 
 import (
 	"context"
@@ -57,16 +58,17 @@ func main() {
 	}
 
 	mode, duration, err := parseInvocation(os.Args)
-	if errors.Is(err, errUsage) {
-		fmt.Fprintln(os.Stderr, usageText)
-		os.Exit(1)
-	}
-	if errors.Is(err, errInvalidDuration) {
-		fmt.Fprintln(os.Stderr, "Error: invalid duration format")
-		os.Exit(1)
-	}
-	if errors.Is(err, errDurationMustBeOver) {
-		fmt.Fprintln(os.Stderr, "Error: duration must be > 0")
+	if err != nil {
+		switch {
+		case errors.Is(err, errUsage):
+			fmt.Fprintln(os.Stderr, usageText)
+		case errors.Is(err, errInvalidDuration):
+			fmt.Fprintln(os.Stderr, "Error: invalid duration format")
+		case errors.Is(err, errDurationMustBeOver):
+			fmt.Fprintln(os.Stderr, "Error: duration must be > 0")
+		default:
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		os.Exit(1)
 	}
 	if mode == modeHelp {
@@ -96,12 +98,54 @@ func shouldRunInternalAlarm(args []string, envValue string) bool {
 	return envValue == "1" && len(args) == 1
 }
 
-func parseRequestedDuration(args []string) (time.Duration, error) {
-	if len(args) != 2 {
-		return 0, errUsage
+// parseInvocation resolves CLI mode with explicit precedence:
+// help returns immediately, version beats unknown flags, and run mode
+// requires exactly one duration token with no unknown flags.
+func parseInvocation(args []string) (invocationMode, time.Duration, error) {
+	if len(args) <= 1 {
+		return modeRun, 0, errUsage
 	}
 
-	duration, err := time.ParseDuration(args[1])
+	hasVersion := false
+	hasUnknownFlag := false
+	var durationToken string
+
+	for _, arg := range args[1:] {
+		switch arg {
+		case "-h", "--help":
+			return modeHelp, 0, nil
+		case "-v", "--version":
+			hasVersion = true
+			continue
+		}
+
+		if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
+			hasUnknownFlag = true
+			continue
+		}
+
+		if durationToken != "" {
+			return modeRun, 0, errUsage
+		}
+		durationToken = arg
+	}
+
+	if hasVersion {
+		return modeVersion, 0, nil
+	}
+	if hasUnknownFlag || durationToken == "" {
+		return modeRun, 0, errUsage
+	}
+
+	duration, err := parseDurationToken(durationToken)
+	if err != nil {
+		return modeRun, 0, err
+	}
+	return modeRun, duration, nil
+}
+
+func parseDurationToken(token string) (time.Duration, error) {
+	duration, err := time.ParseDuration(token)
 	if err != nil {
 		return 0, errInvalidDuration
 	}
@@ -111,43 +155,8 @@ func parseRequestedDuration(args []string) (time.Duration, error) {
 	return duration, nil
 }
 
-func parseInvocation(args []string) (invocationMode, time.Duration, error) {
-	if len(args) == 0 {
-		return modeRun, 0, errUsage
-	}
-
-	containsHelp := false
-	containsVersion := false
-
-	for _, arg := range args[1:] {
-		switch arg {
-		case "-h", "--help":
-			containsHelp = true
-		case "-v", "--version":
-			containsVersion = true
-		}
-	}
-
-	if containsHelp {
-		return modeHelp, 0, nil
-	}
-	if containsVersion {
-		return modeVersion, 0, nil
-	}
-
-	for _, arg := range args[1:] {
-		if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
-			return modeRun, 0, errUsage
-		}
-	}
-
-	duration, err := parseRequestedDuration(args)
-	if err != nil {
-		return modeRun, 0, err
-	}
-	return modeRun, duration, nil
-}
-
+// isPotentialNegativeDuration distinguishes duration-like inputs (e.g. "-1s")
+// from unknown flags so negative durations flow through normal duration validation.
 func isPotentialNegativeDuration(arg string) bool {
 	if len(arg) < 2 || arg[0] != '-' {
 		return false
@@ -203,6 +212,7 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool) err
 			remaining := time.Until(deadline)
 
 			if remaining <= 0 {
+				// done is the authoritative completion signal; ticks are UI-only.
 				continue
 			}
 
@@ -291,6 +301,7 @@ func runAlarmCommand(command alarmCommand) error {
 	return cmd.Run()
 }
 
+// quietCmd creates an exec.Cmd with stdio disconnected/discarded.
 func quietCmd(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = nil

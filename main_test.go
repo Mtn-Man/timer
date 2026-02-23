@@ -48,75 +48,6 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 	}
 }
 
-func TestParseRequestedDuration(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		args         []string
-		wantDuration time.Duration
-		wantErr      error
-	}{
-		{
-			name:    "usage when no duration arg",
-			args:    []string{"timer"},
-			wantErr: errUsage,
-		},
-		{
-			name:    "usage when extra arg is provided",
-			args:    []string{"timer", "1s", "extra"},
-			wantErr: errUsage,
-		},
-		{
-			name:    "invalid duration format",
-			args:    []string{"timer", "abc"},
-			wantErr: errInvalidDuration,
-		},
-		{
-			name:    "duration must be positive for zero",
-			args:    []string{"timer", "0s"},
-			wantErr: errDurationMustBeOver,
-		},
-		{
-			name:    "duration must be positive for negative",
-			args:    []string{"timer", "-1s"},
-			wantErr: errDurationMustBeOver,
-		},
-		{
-			name:         "valid short duration",
-			args:         []string{"timer", "1s"},
-			wantDuration: 1 * time.Second,
-		},
-		{
-			name:         "valid compound duration",
-			args:         []string{"timer", "1h30m"},
-			wantDuration: 90 * time.Minute,
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			gotDuration, err := parseRequestedDuration(tc.args)
-			if tc.wantErr != nil {
-				if !errors.Is(err, tc.wantErr) {
-					t.Fatalf("parseRequestedDuration() error = %v, want %v", err, tc.wantErr)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("parseRequestedDuration() unexpected error = %v", err)
-			}
-			if gotDuration != tc.wantDuration {
-				t.Fatalf("parseRequestedDuration() duration = %v, want %v", gotDuration, tc.wantDuration)
-			}
-		})
-	}
-}
-
 func TestParseInvocation(t *testing.T) {
 	t.Parallel()
 
@@ -161,6 +92,26 @@ func TestParseInvocation(t *testing.T) {
 			name:     "help takes precedence over version",
 			args:     []string{"timer", "--help", "--version"},
 			wantMode: modeHelp,
+		},
+		{
+			name:     "help takes precedence over unknown flag",
+			args:     []string{"timer", "--help", "--wat"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "help takes precedence over prior unknown flag",
+			args:     []string{"timer", "--wat", "--help"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "version takes precedence over unknown flag",
+			args:     []string{"timer", "--version", "--wat"},
+			wantMode: modeVersion,
+		},
+		{
+			name:     "version takes precedence over prior unknown flag",
+			args:     []string{"timer", "--wat", "--version"},
+			wantMode: modeVersion,
 		},
 		{
 			name:    "unknown short flag is usage error",

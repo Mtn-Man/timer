@@ -66,7 +66,6 @@ it does not emit countdown/title updates or alarm audio, and prints a single `ti
 
 Press Ctrl+C at any time to cancel the timer gracefully. This prints `timer cancelled` and exits with code 130. 
 Note that the terminal title bar may retain the last displayed time after cancellation depending on your terminal emulator.
-It should update once you navigate to a new directory or run another binary.
 
 ## License
 
