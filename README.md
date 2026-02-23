@@ -1,13 +1,14 @@
 # Timer
 
-A simple countdown timer utility for the command line with visual feedback and audio alerts. It runs best on macOS, but supports other Unix-like systems.
+A simple countdown timer utility for the command line with visual feedback and audio alerts. It runs best on macOS, but supports other Unix-like systems like Linux. No Windows support at present.
 
 ## Features
 
 - Live countdown display in both the terminal and title bar
-- Graceful cancellation via Ctrl+C with automatic title restoration
+- Graceful cancellation via Ctrl+C
 - Audio alert on completion (plays system sound 4 times)
 - Ceiling-based display (never shows 00:00:00 while time remains)
+- Quiet mode when piped or redirected (no escape codes, no audio)
 - Clean, minimal interface
 
 ## Installation
@@ -56,13 +57,16 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 ## How It Works
 
-The timer updates every 500ms, displaying the remaining time in `HH:MM:SS` format. The countdown appears both in your terminal output and in the terminal window's title bar. 
-When the timer completes, it plays the system "Submarine" sound four times and displays "Timer Complete".
+The timer updates every 500ms, displaying the remaining time in `HH:MM:SS` format. The countdown appears both in your terminal output and in the terminal window's title bar.
 
-When stdout is not a TTY (for example, redirected or piped), the timer switches to a quiet mode: 
+When the timer completes, it prints `timer complete`, plays the system "Submarine" sound four times, and exits.
+
+When stdout is not a TTY (for example, redirected or piped), the timer switches to a quiet mode:
 it does not emit countdown/title updates or alarm audio, and prints a single `timer complete` line when done.
 
-Press Ctrl+C at any time to cancel the timer gracefully.
+Press Ctrl+C at any time to cancel the timer gracefully. This prints `timer cancelled` and exits with code 130. 
+Note that the terminal title bar may retain the last displayed time after cancellation depending on your terminal emulator.
+It should update once you navigate to a new directory or run another binary.
 
 ## License
 
