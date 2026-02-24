@@ -18,10 +18,10 @@ A simple countdown timer utility for the command line with visual feedback and a
 1. Download your platform archive and `checksums.txt` from the
    [latest release](https://github.com/Mtn-Man/timer/releases/latest).
    Available archives:
-   - `timer_darwin_amd64.tar.gz`
-   - `timer_darwin_arm64.tar.gz`
-   - `timer_linux_amd64.tar.gz`
-   - `timer_linux_arm64.tar.gz`
+   - `timer_v1.0.0_darwin_amd64.tar.gz`
+   - `timer_v1.0.0_darwin_arm64.tar.gz`
+   - `timer_v1.0.0_linux_amd64.tar.gz`
+   - `timer_v1.0.0_linux_arm64.tar.gz`
 2. Open a terminal and change to the folder where you downloaded the release files
    (for example, `~/Downloads`):
    ```bash
@@ -33,7 +33,7 @@ A simple countdown timer utility for the command line with visual feedback and a
    ```
 4. Extract your archive (example shown for macOS Apple Silicon):
    ```bash
-   tar -xzf timer_darwin_arm64.tar.gz
+   tar -xzf timer_v1.0.0_darwin_arm64.tar.gz
    ```
 5. Move the extracted binary into your `PATH` as `timer`:
    ```bash
