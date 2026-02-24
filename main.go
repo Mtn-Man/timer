@@ -324,7 +324,7 @@ func alarmCandidatesForGOOS(goos string) []alarmCommand {
 	case "linux":
 		return []alarmCommand{
 			{name: "canberra-gtk-play", args: []string{"-i", "bell"}},
-			{name: "aplay", args: []string{"/usr/share/sounds/alsa/Front_Center.wav"}},
+			{name: "timeout", args: []string{"0.15s", "speaker-test", "-t", "sine", "-f", "1200", "-c", "1", "-s", "1"}},
 		}
 	case "freebsd":
 		return []alarmCommand{
