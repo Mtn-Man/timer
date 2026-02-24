@@ -17,31 +17,54 @@ A simple countdown timer utility for the command line with visual feedback and a
 
 1. Download your platform archive and `checksums.txt` from the
    [latest release](https://github.com/Mtn-Man/timer/releases/latest).
-   Available archives:
-   - `timer_v1.0.0_darwin_amd64.tar.gz`
-   - `timer_v1.0.0_darwin_arm64.tar.gz`
-   - `timer_v1.0.0_linux_amd64.tar.gz`
-   - `timer_v1.0.0_linux_arm64.tar.gz`
+   Replace `<version>` in the examples below with the release tag
+   (for example, `v1.0.0`).
+   Archive naming pattern:
+   - `timer_<version>_darwin_amd64.tar.gz`
+   - `timer_<version>_darwin_arm64.tar.gz`
+   - `timer_<version>_linux_amd64.tar.gz`
+   - `timer_<version>_linux_arm64.tar.gz`
 2. Open a terminal and change to the folder where you downloaded the release files
    (for example, `~/Downloads`):
    ```bash
    cd ~/Downloads
    ```
-3. Verify checksums (optional but recommended):
+3. Verify checksum (optional but recommended):
+   Example for macOS Apple Silicon:
    ```bash
-   shasum -a 256 -c checksums.txt
+   grep "timer_<version>_darwin_arm64.tar.gz$" checksums.txt | shasum -a 256 -c -
+   ```
+   Example for Linux:
+   ```bash
+   grep "timer_<version>_linux_amd64.tar.gz$" checksums.txt | sha256sum -c -
    ```
 4. Extract your archive (example shown for macOS Apple Silicon):
    ```bash
-   tar -xzf timer_v1.0.0_darwin_arm64.tar.gz
+   tar -xzf timer_<version>_darwin_arm64.tar.gz
    ```
-5. Move the extracted binary into your `PATH` as `timer`:
+5. Install the extracted binary into `/usr/local/bin` (default):
    ```bash
    sudo install -m 0755 timer_darwin_arm64 /usr/local/bin/timer
    ```
-   If you are on a different platform, replace `timer_darwin_arm64` with your
-   matching release binary filename.
-6. Verify:
+   If you are on a different platform, replace the archive and binary filenames
+   above with the matching release files for your OS/architecture.
+6. Alternative (no `sudo`): install to `~/.local/bin`:
+   ```bash
+   mkdir -p ~/.local/bin
+   install -m 0755 timer_darwin_arm64 ~/.local/bin/timer
+   ```
+   If `~/.local/bin` is not in your `PATH`, add it to your shell startup file
+   (for example, `~/.zshrc` or `~/.bashrc`), then reload your shell:
+   ```bash
+   # zsh
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+   source ~/.zshrc
+
+   # bash
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+7. Verify:
    ```bash
    timer --version
    ```
@@ -55,7 +78,7 @@ go install github.com/Mtn-Man/timer@latest
 
 Or install a specific release:
 ```bash
-go install github.com/Mtn-Man/timer@v1.0.0
+go install github.com/Mtn-Man/timer@<version>
 ```
 
 Or clone and build locally:
@@ -80,7 +103,7 @@ timer 5m       # 5 minutes
 timer 1.5h     # 1.5 hours
 timer 90m      # 90 minutes
 timer --help   # Show help
-timer -v       # Show version (timer v1.0.0)
+timer -v       # Show version (e.g.  timer v1.0.0)
 ```
 
 The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
