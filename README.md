@@ -15,17 +15,33 @@ A simple countdown timer utility for the command line with visual feedback and a
 
 ### Install Release Binary (No Go Required)
 
-1. Download the archive for your platform from the
+1. Download your platform archive and `checksums.txt` from the
    [latest release](https://github.com/Mtn-Man/timer/releases/latest).
-2. Extract it:
+   Available archives:
+   - `timer_darwin_amd64.tar.gz`
+   - `timer_darwin_arm64.tar.gz`
+   - `timer_linux_amd64.tar.gz`
+   - `timer_linux_arm64.tar.gz`
+2. Open a terminal and change to the folder where you downloaded the release files
+   (for example, `~/Downloads`):
    ```bash
-   tar -xzf <release-archive>.tar.gz
+   cd ~/Downloads
    ```
-3. Move the extracted binary into your `PATH` as `timer`:
+3. Verify checksums (optional but recommended):
    ```bash
-   sudo install -m 0755 <extracted-binary> /usr/local/bin/timer
+   shasum -a 256 -c checksums.txt
    ```
-4. Verify:
+4. Extract your archive (example shown for macOS Apple Silicon):
+   ```bash
+   tar -xzf timer_darwin_arm64.tar.gz
+   ```
+5. Move the extracted binary into your `PATH` as `timer`:
+   ```bash
+   sudo install -m 0755 timer_darwin_arm64 /usr/local/bin/timer
+   ```
+   If you are on a different platform, replace `timer_darwin_arm64` with your
+   matching release binary filename.
+6. Verify:
    ```bash
    timer --version
    ```
