@@ -61,13 +61,20 @@ const (
 	modeVersion
 )
 
+type invocation struct {
+	mode       invocationMode
+	duration   time.Duration
+	quiet      bool
+	forceAlarm bool
+}
+
 func main() {
 	if shouldRunInternalAlarm(os.Args, os.Getenv(internalAlarmEnv)) {
 		runAlarmWorker()
 		return
 	}
 
-	mode, duration, quiet, forceAlarm, err := parseInvocation(os.Args)
+	inv, err := parseInvocation(os.Args)
 	if err != nil {
 		switch {
 		case errors.Is(err, errUsage):
@@ -81,11 +88,11 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	if mode == modeHelp {
+	if inv.mode == modeHelp {
 		fmt.Println(helpText)
 		return
 	}
-	if mode == modeVersion {
+	if inv.mode == modeVersion {
 		fmt.Printf("timer %s\n", appVersion)
 		return
 	}
@@ -106,11 +113,11 @@ func main() {
 
 	interactive := stdoutIsTTY()
 
-	if err := runTimer(ctx, duration, interactive, quiet, forceAlarm); err != nil {
+	if err := runTimer(ctx, inv.duration, interactive, inv.quiet, inv.forceAlarm); err != nil {
 		if interactive {
 			fmt.Print("\r\033[K")
 		}
-		if interactive && !quiet {
+		if interactive && !inv.quiet {
 			fmt.Println("timer cancelled")
 		}
 		os.Exit(exitCodeForCancelError(err))
@@ -139,29 +146,30 @@ func shouldRunInternalAlarm(args []string, envValue string) bool {
 // parseInvocation resolves CLI mode with explicit precedence:
 // help returns immediately, version beats unknown flags, and run mode
 // requires exactly one duration token with no unknown flags.
-func parseInvocation(args []string) (invocationMode, time.Duration, bool, bool, error) {
+func parseInvocation(args []string) (invocation, error) {
 	if len(args) <= 1 {
-		return modeRun, 0, false, false, errUsage
+		return invocation{mode: modeRun}, errUsage
 	}
 
+	inv := invocation{
+		mode: modeRun,
+	}
 	hasVersion := false
-	isQuiet := false
-	hasAlarm := false
 	hasUnknownFlag := false
 	var durationToken string
 
 	for _, arg := range args[1:] {
 		switch arg {
 		case "-h", "--help":
-			return modeHelp, 0, false, false, nil
+			return invocation{mode: modeHelp}, nil
 		case "-v", "--version":
 			hasVersion = true
 			continue
 		case "-q", "--quiet":
-			isQuiet = true
+			inv.quiet = true
 			continue
 		case "--alarm":
-			hasAlarm = true
+			inv.forceAlarm = true
 			continue
 		}
 
@@ -171,23 +179,24 @@ func parseInvocation(args []string) (invocationMode, time.Duration, bool, bool, 
 		}
 
 		if durationToken != "" {
-			return modeRun, 0, false, false, errUsage
+			return invocation{mode: modeRun}, errUsage
 		}
 		durationToken = arg
 	}
 
 	if hasVersion {
-		return modeVersion, 0, isQuiet, hasAlarm, nil
+		return invocation{mode: modeVersion, quiet: inv.quiet, forceAlarm: inv.forceAlarm}, nil
 	}
 	if hasUnknownFlag || durationToken == "" {
-		return modeRun, 0, false, false, errUsage
+		return invocation{mode: modeRun}, errUsage
 	}
 
 	duration, err := parseDurationToken(durationToken)
 	if err != nil {
-		return modeRun, 0, false, false, err
+		return invocation{mode: modeRun}, err
 	}
-	return modeRun, duration, isQuiet, hasAlarm, nil
+	inv.duration = duration
+	return inv, nil
 }
 
 func parseDurationToken(token string) (time.Duration, error) {

@@ -233,7 +233,7 @@ func TestParseInvocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gotMode, gotDuration, gotQuiet, gotAlarm, err := parseInvocation(tc.args)
+			got, err := parseInvocation(tc.args)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("parseInvocation() error = %v, want %v", err, tc.wantErr)
@@ -244,17 +244,17 @@ func TestParseInvocation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseInvocation() unexpected error = %v", err)
 			}
-			if gotMode != tc.wantMode {
-				t.Fatalf("parseInvocation() mode = %v, want %v", gotMode, tc.wantMode)
+			if got.mode != tc.wantMode {
+				t.Fatalf("parseInvocation() mode = %v, want %v", got.mode, tc.wantMode)
 			}
-			if gotDuration != tc.wantDuration {
-				t.Fatalf("parseInvocation() duration = %v, want %v", gotDuration, tc.wantDuration)
+			if got.duration != tc.wantDuration {
+				t.Fatalf("parseInvocation() duration = %v, want %v", got.duration, tc.wantDuration)
 			}
-			if gotQuiet != tc.wantQuiet {
-				t.Fatalf("parseInvocation() quiet = %v, want %v", gotQuiet, tc.wantQuiet)
+			if got.quiet != tc.wantQuiet {
+				t.Fatalf("parseInvocation() quiet = %v, want %v", got.quiet, tc.wantQuiet)
 			}
-			if gotAlarm != tc.wantAlarm {
-				t.Fatalf("parseInvocation() alarm = %v, want %v", gotAlarm, tc.wantAlarm)
+			if got.forceAlarm != tc.wantAlarm {
+				t.Fatalf("parseInvocation() alarm = %v, want %v", got.forceAlarm, tc.wantAlarm)
 			}
 		})
 	}
