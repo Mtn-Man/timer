@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -30,7 +31,9 @@ import (
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
-	usageText = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
+	usageText             = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
+	defaultVersion        = "dev"
+	develBuildInfoVersion = "(devel)"
 )
 
 var (
@@ -39,7 +42,7 @@ var (
 	errDurationMustBeAtLeastZero = errors.New("duration must be >= 0")
 	// version is overridden in release builds via:
 	// go build -ldflags "-X main.version=vX.Y.Z"
-	version = "dev"
+	version = defaultVersion
 )
 
 type alarmCommand struct {
@@ -110,7 +113,7 @@ func main() {
 		return
 	}
 	if inv.mode == modeVersion {
-		fmt.Print(formatVersionLine(version))
+		fmt.Print(formatVersionLine(resolveVersion(version, mainModuleVersion())))
 		return
 	}
 	if inv.forceAwake && runtime.GOOS != "darwin" {
@@ -184,6 +187,27 @@ func renderHelpText() string {
 
 func formatVersionLine(v string) string {
 	return fmt.Sprintf("timer %s\n", v)
+}
+
+func mainModuleVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info == nil {
+		return ""
+	}
+	return info.Main.Version
+}
+
+func resolveVersion(buildVersion, moduleVersion string) string {
+	if buildVersion != "" && buildVersion != defaultVersion {
+		return buildVersion
+	}
+	if moduleVersion != "" && moduleVersion != develBuildInfoVersion {
+		return moduleVersion
+	}
+	if buildVersion != "" {
+		return buildVersion
+	}
+	return defaultVersion
 }
 
 func awakeUnsupportedWarning() string {

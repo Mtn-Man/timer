@@ -122,7 +122,8 @@ go build -ldflags "-X main.version=vX.Y.Z" -o timer .
 ./timer --version
 ```
 
-Without `-ldflags`, `--version` reports `timer dev`.
+For local source builds without `-ldflags`, `--version` reports `timer dev`.
+When installed with `go install github.com/Mtn-Man/timer@<version>`, `--version` typically reports that module version.
 
 ## Usage
 ```bash
@@ -152,7 +153,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 ### Flags
 
 - `-h`, `--help`: Show help and exit
-- `-v`, `--version`: Show version and exit (`timer dev` unless injected at build time)
+- `-v`, `--version`: Show version and exit (reports injected build version, module version when available, or `timer dev` for local non-injected builds)
 - `-q`, `--quiet`: Interactive inline countdown only (no title updates, completion line, alarm, or cancel text)
 - `--alarm`: Force alarm playback on completion even in `--quiet` or non-TTY mode
 - `--awake`: Force sleep-inhibition attempt even in non-TTY mode (macOS only)
@@ -167,7 +168,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 - `timer` not found after install (`timer: command not found`): Ensure your install location is in `PATH` (`$(go env GOPATH)/bin` or `GOBIN` for `go install`, `/usr/local/bin` or `~/.local/bin` for manual install), then restart or reload your shell.
 - `Permission denied` while installing to `/usr/local/bin`: Use `sudo install ...` or install to `~/.local/bin` instead.
-- `timer --version` shows `timer dev`: This is expected for local builds without `-ldflags "-X main.version=vX.Y.Z"`.
+- `timer --version` shows `timer dev`: This is expected for local source builds without `-ldflags "-X main.version=vX.Y.Z"` (for example, `go build .`).
 
 ## How It Works
 
