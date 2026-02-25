@@ -91,6 +91,14 @@ go build -o timer .
 ./timer --version
 ```
 
+Build with an injected version (recommended for releases):
+```bash
+go build -ldflags "-X main.version=v1.0.0" -o timer .
+./timer --version
+```
+
+Without `-ldflags`, `--version` reports `timer dev`.
+
 ## Usage
 ```bash
 timer <duration>
@@ -107,7 +115,7 @@ timer 5m       # 5 minutes
 timer 1.5h     # 1.5 hours
 timer 90m      # 90 minutes
 timer --help   # Show help
-timer -v       # Show version (e.g.  timer v1.0.0)
+timer -v       # Show version (e.g. timer dev or timer v1.0.0)
 timer -q 5m    # Quiet mode: inline countdown only
 timer --alarm 5m # Force alarm playback even in quiet/non-TTY mode
 ```
@@ -117,7 +125,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 ### Flags
 
 - `-h`, `--help`: Show help and exit
-- `-v`, `--version`: Show version (`timer v1.0.0`) and exit
+- `-v`, `--version`: Show version and exit (`timer dev` unless injected at build time)
 - `-q`, `--quiet`: Interactive inline countdown only (no title updates, completion line, alarm, or cancel text)
 - `--alarm`: Force alarm playback on completion even in `--quiet` or non-TTY mode
 

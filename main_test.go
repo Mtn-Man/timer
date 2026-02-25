@@ -67,6 +67,39 @@ func TestRenderHelpText(t *testing.T) {
 	}
 }
 
+func TestFormatVersionLine(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{
+			name:    "default dev version",
+			version: "dev",
+			want:    "timer dev\n",
+		},
+		{
+			name:    "injected release version",
+			version: "v1.2.3",
+			want:    "timer v1.2.3\n",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := formatVersionLine(tc.version)
+			if got != tc.want {
+				t.Fatalf("formatVersionLine(%q) = %q, want %q", tc.version, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseInvocation(t *testing.T) {
 	t.Parallel()
 

@@ -30,14 +30,16 @@ import (
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
-	appVersion = "v1.0.0"
-	usageText  = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
+	usageText = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
 )
 
 var (
 	errUsage                     = errors.New("usage")
 	errInvalidDuration           = errors.New("invalid duration format")
 	errDurationMustBeAtLeastZero = errors.New("duration must be >= 0")
+	// version is overridden in release builds via:
+	// go build -ldflags "-X main.version=vX.Y.Z"
+	version = "dev"
 )
 
 type alarmCommand struct {
@@ -106,7 +108,7 @@ func main() {
 		return
 	}
 	if inv.mode == modeVersion {
-		fmt.Printf("timer %s\n", appVersion)
+		fmt.Print(formatVersionLine(version))
 		return
 	}
 
@@ -173,6 +175,10 @@ func renderHelpText() string {
 	}
 
 	return b.String()
+}
+
+func formatVersionLine(v string) string {
+	return fmt.Sprintf("timer %s\n", v)
 }
 
 // parseInvocation resolves CLI mode with explicit precedence:
