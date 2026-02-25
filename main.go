@@ -10,7 +10,7 @@ package main
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
 // - Prevent sleep on macOS while timer is active
-// - Non-TTY-safe behavior: disables interactive UI/alerts; prints a single completion line
+// - Non-TTY-safe behavior: disables interactive UI/output/alerts
 
 import (
 	"context"
@@ -43,6 +43,14 @@ var (
 type alarmCommand struct {
 	name string
 	args []string
+}
+
+type signalCause struct {
+	sig os.Signal
+}
+
+func (c signalCause) Error() string {
+	return fmt.Sprintf("cancelled by signal %v", c.sig)
 }
 
 type invocationMode int
@@ -82,8 +90,19 @@ func main() {
 		return
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	defer cancel(nil)
+
+	go func() {
+		sig, ok := <-sigCh
+		if !ok {
+			return
+		}
+		cancel(signalCause{sig: sig})
+	}()
 
 	interactive := stdoutIsTTY()
 
@@ -92,8 +111,21 @@ func main() {
 			fmt.Print("\r\033[K")
 			fmt.Println("timer cancelled")
 		}
-		os.Exit(130)
+		os.Exit(exitCodeForCancelError(err))
 	}
+}
+
+func exitCodeForCancelError(err error) int {
+	var cause signalCause
+	if errors.As(err, &cause) {
+		switch cause.sig {
+		case os.Interrupt:
+			return 130
+		case syscall.SIGTERM:
+			return 143
+		}
+	}
+	return 130
 }
 
 // shouldRunInternalAlarm reports whether to run as an internal alarm worker.
@@ -200,14 +232,12 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool) err
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 
 		case <-done.C:
 			if interactive {
 				fmt.Print("\r\033[K")
-			}
-			fmt.Println("timer complete")
-			if interactive {
+				fmt.Println("timer complete")
 				startAlarmProcess()
 			}
 			return nil

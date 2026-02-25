@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -235,6 +238,65 @@ func TestIsTerminal_NonTTYDescriptors(t *testing.T) {
 
 	if isTerminal(pipeWriter.Fd()) {
 		t.Fatal("isTerminal() = true for pipe writer, want false")
+	}
+}
+
+func TestExitCodeForCancelError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{
+			name: "sigint maps to 130",
+			err:  signalCause{sig: os.Interrupt},
+			want: 130,
+		},
+		{
+			name: "sigterm maps to 143",
+			err:  signalCause{sig: syscall.SIGTERM},
+			want: 143,
+		},
+		{
+			name: "wrapped signal cause maps by contained cause",
+			err:  fmt.Errorf("wrapped: %w", signalCause{sig: syscall.SIGTERM}),
+			want: 143,
+		},
+		{
+			name: "unknown error falls back to 130",
+			err:  errors.New("cancelled"),
+			want: 130,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := exitCodeForCancelError(tc.err)
+			if got != tc.want {
+				t.Fatalf("exitCodeForCancelError() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunTimerReturnsCancelCause(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(signalCause{sig: syscall.SIGTERM})
+
+	err := runTimer(ctx, time.Hour, false)
+	if err == nil {
+		t.Fatal("runTimer() error = nil, want cancellation cause")
+	}
+
+	if got := exitCodeForCancelError(err); got != 143 {
+		t.Fatalf("runTimer() cancellation exit code = %d, want 143", got)
 	}
 }
 
