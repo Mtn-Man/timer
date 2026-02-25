@@ -1,6 +1,6 @@
 # Timer
 
-A simple countdown timer utility for the command line with visual feedback and audio alerts. It runs best on macOS, but supports other Unix-like systems like Linux. No Windows support at present.
+A fast command-line countdown timer with live terminal feedback, graceful cancellation, and optional completion alarms.
 
 ## Features
 
@@ -9,24 +9,48 @@ A simple countdown timer utility for the command line with visual feedback and a
 - Audio alert on completion (best-effort, platform-specific backend)
 - Optional `-q`/`--quiet` mode for inline countdown only
 - Optional `--alarm` to force alarm playback on completion
-- Optional `--awake` to force sleep-inhibition attempt in non-TTY mode (darwin only)
+- Optional `--awake` to force sleep-inhibition attempt in non-TTY mode (macOS only)
 - Ceiling-based display (never shows 00:00:00 while time remains)
 - Quiet mode when piped or redirected (no countdown output, no audio unless `--alarm`)
 - Clean, minimal interface
 
+## Quick Start
+
+Prerequisite: Go 1.20+ installed. Get Go: https://go.dev/dl/
+
+Install and run in under a minute:
+
+```bash
+go install github.com/Mtn-Man/timer@latest
+timer 10m
+timer --help
+```
+
+A Homebrew tap is planned; for now, `go install` is the quickest setup path.
+If `timer` is not found after install, see [Troubleshooting](#troubleshooting).
+
+## Platform Support
+
+- Prebuilt release binaries are published for tested platforms: macOS and Linux (`amd64` and `arm64`).
+- BSD systems are expected to work when building from source, but prebuilt BSD binaries are not currently published.
+- Windows is not supported currently.
+
 ## Installation
 
-### Install Release Binary (No Go Required)
+### Install Prebuilt Release Binary (Tested Platforms: macOS/Linux)
 
 1. Download your platform archive and `checksums.txt` from the
    [latest release](https://github.com/Mtn-Man/timer/releases/latest).
    Replace `<version>` in the examples below with the release tag
-   (for example, `v1.0.0`).
+   (for example, `vX.Y.Z`).
    Archive naming pattern:
    - `timer_<version>_darwin_amd64.tar.gz`
    - `timer_<version>_darwin_arm64.tar.gz`
    - `timer_<version>_linux_amd64.tar.gz`
    - `timer_<version>_linux_arm64.tar.gz`
+   Note: release filenames use `darwin` to refer to macOS.
+   The examples below use macOS Apple Silicon filenames; swap in the archive
+   and binary names for your OS/architecture.
 2. Open a terminal and change to the folder where you downloaded the release files
    (for example, `~/Downloads`):
    ```bash
@@ -94,7 +118,7 @@ go build -o timer .
 
 Build with an injected version (recommended for releases):
 ```bash
-go build -ldflags "-X main.version=v1.0.0" -o timer .
+go build -ldflags "-X main.version=vX.Y.Z" -o timer .
 ./timer --version
 ```
 
@@ -117,10 +141,10 @@ timer 5m       # 5 minutes
 timer 1.5h     # 1.5 hours
 timer 90m      # 90 minutes
 timer --help   # Show help
-timer -v       # Show version (e.g. timer dev or timer v1.0.0)
+timer -v       # Show version (e.g. timer dev or timer vX.Y.Z)
 timer -q 5m    # Quiet mode: inline countdown only
 timer --alarm 5m # Force alarm playback even in quiet/non-TTY mode
-timer --awake 10m > /tmp/timer.log # Force darwin sleep inhibition attempt in non-TTY mode
+timer --awake 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
 ```
 
 The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
@@ -131,13 +155,19 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 - `-v`, `--version`: Show version and exit (`timer dev` unless injected at build time)
 - `-q`, `--quiet`: Interactive inline countdown only (no title updates, completion line, alarm, or cancel text)
 - `--alarm`: Force alarm playback on completion even in `--quiet` or non-TTY mode
-- `--awake`: Force sleep-inhibition attempt even in non-TTY mode (darwin only)
+- `--awake`: Force sleep-inhibition attempt even in non-TTY mode (macOS only)
 
 ## Requirements
 
 - Go 1.20+ required only for building from source
-- A Unix-like OS (macOS, Linux, or BSD)
-- macOS provides the best out-of-the-box audio/terminal experience
+- A Unix-like OS (macOS, Linux, or BSD) for source builds
+- Prebuilt binaries are currently published for macOS/Linux only
+
+## Troubleshooting
+
+- `timer` not found after install (`timer: command not found`): Ensure your install location is in `PATH` (`$(go env GOPATH)/bin` or `GOBIN` for `go install`, `/usr/local/bin` or `~/.local/bin` for manual install), then restart or reload your shell.
+- `Permission denied` while installing to `/usr/local/bin`: Use `sudo install ...` or install to `~/.local/bin` instead.
+- `timer --version` shows `timer dev`: This is expected for local builds without `-ldflags "-X main.version=vX.Y.Z"`.
 
 ## How It Works
 
@@ -154,8 +184,8 @@ it does not emit countdown/title updates, completion output, or alarm audio.
 When `--alarm` is provided, alarm playback is still attempted on completion in `--quiet` and non-TTY modes.
 This only affects alarm behavior; output suppression remains unchanged.
 
-On darwin, sleep inhibition is attempted during interactive runs. With `--awake`, the timer also attempts sleep inhibition in non-TTY/piped runs (best effort).
-On non-darwin systems, `--awake` prints a warning and continues normally without sleep inhibition.
+On macOS, sleep inhibition is attempted during interactive runs. With `--awake`, the timer also attempts sleep inhibition in non-TTY/piped runs (best effort).
+On non-macOS systems, `--awake` prints a warning and continues normally without sleep inhibition.
 
 Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode, the current line is cleared and `timer cancelled` is printed, then the process exits with code 130. In `--quiet` mode and non-TTY mode, cancellation text is suppressed.
 If the process receives SIGTERM, it exits with code 143.
