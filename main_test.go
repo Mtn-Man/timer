@@ -232,6 +232,12 @@ func TestParseInvocation(t *testing.T) {
 			wantDuration: 1 * time.Second,
 		},
 		{
+			name:         "zero duration invocation",
+			args:         []string{"timer", "0s"},
+			wantMode:     modeRun,
+			wantDuration: 0,
+		},
+		{
 			name:    "invalid duration format",
 			args:    []string{"timer", "abc"},
 			wantErr: errInvalidDuration,
@@ -239,7 +245,7 @@ func TestParseInvocation(t *testing.T) {
 		{
 			name:    "negative duration remains duration validation error",
 			args:    []string{"timer", "-1s"},
-			wantErr: errDurationMustBeOver,
+			wantErr: errDurationMustBeAtLeastZero,
 		},
 	}
 

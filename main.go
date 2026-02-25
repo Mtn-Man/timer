@@ -35,9 +35,9 @@ const (
 )
 
 var (
-	errUsage              = errors.New("usage")
-	errInvalidDuration    = errors.New("invalid duration format")
-	errDurationMustBeOver = errors.New("duration must be > 0")
+	errUsage                     = errors.New("usage")
+	errInvalidDuration           = errors.New("invalid duration format")
+	errDurationMustBeAtLeastZero = errors.New("duration must be >= 0")
 )
 
 type alarmCommand struct {
@@ -94,8 +94,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, usageText)
 		case errors.Is(err, errInvalidDuration):
 			fmt.Fprintln(os.Stderr, "Error: invalid duration format")
-		case errors.Is(err, errDurationMustBeOver):
-			fmt.Fprintln(os.Stderr, "Error: duration must be > 0")
+		case errors.Is(err, errDurationMustBeAtLeastZero):
+			fmt.Fprintln(os.Stderr, "Error: duration must be >= 0")
 		default:
 			fmt.Fprintln(os.Stderr, "Error:", err)
 		}
@@ -236,8 +236,8 @@ func parseDurationToken(token string) (time.Duration, error) {
 	if err != nil {
 		return 0, errInvalidDuration
 	}
-	if duration <= 0 {
-		return 0, errDurationMustBeOver
+	if duration < 0 {
+		return 0, errDurationMustBeAtLeastZero
 	}
 	return duration, nil
 }
