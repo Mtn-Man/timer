@@ -9,7 +9,7 @@ package main
 // - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
-// - Prevent sleep on macOS while timer is active
+// - Prevent sleep on macOS while timer is active in interactive mode
 // - Non-TTY-safe behavior: disables interactive UI/output/alerts
 
 import (
@@ -210,7 +210,7 @@ func isPotentialNegativeDuration(arg string) bool {
 
 func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool) error {
 	var sleepInhibitor *exec.Cmd
-	if runtime.GOOS == "darwin" {
+	if shouldStartSleepInhibitor(runtime.GOOS, interactive) {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
 		if err := sleepInhibitor.Start(); err != nil {
 			sleepInhibitor = nil
@@ -276,6 +276,10 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool, qui
 			}
 		}
 	}
+}
+
+func shouldStartSleepInhibitor(goos string, interactive bool) bool {
+	return goos == "darwin" && interactive
 }
 
 func stdoutIsTTY() bool {

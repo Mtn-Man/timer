@@ -341,6 +341,48 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	}
 }
 
+func TestShouldStartSleepInhibitor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		goos        string
+		interactive bool
+		want        bool
+	}{
+		{
+			name:        "darwin interactive",
+			goos:        "darwin",
+			interactive: true,
+			want:        true,
+		},
+		{
+			name:        "darwin non interactive",
+			goos:        "darwin",
+			interactive: false,
+			want:        false,
+		},
+		{
+			name:        "linux interactive",
+			goos:        "linux",
+			interactive: true,
+			want:        false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shouldStartSleepInhibitor(tc.goos, tc.interactive)
+			if got != tc.want {
+				t.Fatalf("shouldStartSleepInhibitor(%q, %v) = %v, want %v", tc.goos, tc.interactive, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPlayAlarmAttempts_RemovesFailingBackendsAndFallsBack(t *testing.T) {
 	t.Parallel()
 
