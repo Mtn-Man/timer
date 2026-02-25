@@ -114,7 +114,7 @@ func main() {
 		return
 	}
 	if inv.forceAwake && runtime.GOOS != "darwin" {
-		fmt.Fprintln(os.Stderr, awakeUnsupportedWarning(runtime.GOOS))
+		fmt.Fprintln(os.Stderr, awakeUnsupportedWarning())
 	}
 
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -186,7 +186,7 @@ func formatVersionLine(v string) string {
 	return fmt.Sprintf("timer %s\n", v)
 }
 
-func awakeUnsupportedWarning(_ string) string {
+func awakeUnsupportedWarning() string {
 	return "Warning: --awake sleep inhibition is only supported on darwin; continuing without sleep inhibition"
 }
 

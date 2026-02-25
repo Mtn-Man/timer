@@ -105,7 +105,7 @@ func TestAwakeUnsupportedWarning(t *testing.T) {
 	t.Parallel()
 
 	want := "Warning: --awake sleep inhibition is only supported on darwin; continuing without sleep inhibition"
-	got := awakeUnsupportedWarning("linux")
+	got := awakeUnsupportedWarning()
 	if got != want {
 		t.Fatalf("awakeUnsupportedWarning() = %q, want %q", got, want)
 	}
