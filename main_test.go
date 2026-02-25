@@ -61,6 +61,7 @@ func TestParseInvocation(t *testing.T) {
 		wantMode     invocationMode
 		wantDuration time.Duration
 		wantQuiet    bool
+		wantAlarm    bool
 		wantErr      error
 	}{
 		{
@@ -92,6 +93,29 @@ func TestParseInvocation(t *testing.T) {
 			name:     "version flag wins with extra args",
 			args:     []string{"timer", "--version", "10s"},
 			wantMode: modeVersion,
+		},
+		{
+			name:         "alarm long flag with duration",
+			args:         []string{"timer", "--alarm", "1s"},
+			wantMode:     modeRun,
+			wantDuration: 1 * time.Second,
+			wantAlarm:    true,
+		},
+		{
+			name:         "alarm and quiet with duration",
+			args:         []string{"timer", "--alarm", "--quiet", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+			wantAlarm:    true,
+		},
+		{
+			name:         "quiet and alarm with duration",
+			args:         []string{"timer", "--quiet", "--alarm", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+			wantAlarm:    true,
 		},
 		{
 			name:         "quiet short flag with duration",
@@ -131,8 +155,18 @@ func TestParseInvocation(t *testing.T) {
 			wantErr: errUsage,
 		},
 		{
+			name:    "alarm without duration is usage error",
+			args:    []string{"timer", "--alarm"},
+			wantErr: errUsage,
+		},
+		{
 			name:     "help takes precedence over version",
 			args:     []string{"timer", "--help", "--version"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "help takes precedence over alarm",
+			args:     []string{"timer", "--help", "--alarm"},
 			wantMode: modeHelp,
 		},
 		{
@@ -149,6 +183,12 @@ func TestParseInvocation(t *testing.T) {
 			name:     "version takes precedence over unknown flag",
 			args:     []string{"timer", "--version", "--wat"},
 			wantMode: modeVersion,
+		},
+		{
+			name:      "version with alarm returns version mode with alarm set",
+			args:      []string{"timer", "--version", "--alarm"},
+			wantMode:  modeVersion,
+			wantAlarm: true,
 		},
 		{
 			name:     "version takes precedence over prior unknown flag",
@@ -193,7 +233,7 @@ func TestParseInvocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gotMode, gotDuration, gotQuiet, err := parseInvocation(tc.args)
+			gotMode, gotDuration, gotQuiet, gotAlarm, err := parseInvocation(tc.args)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("parseInvocation() error = %v, want %v", err, tc.wantErr)
@@ -212,6 +252,9 @@ func TestParseInvocation(t *testing.T) {
 			}
 			if gotQuiet != tc.wantQuiet {
 				t.Fatalf("parseInvocation() quiet = %v, want %v", gotQuiet, tc.wantQuiet)
+			}
+			if gotAlarm != tc.wantAlarm {
+				t.Fatalf("parseInvocation() alarm = %v, want %v", gotAlarm, tc.wantAlarm)
 			}
 		})
 	}
@@ -331,13 +374,73 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(signalCause{sig: syscall.SIGTERM})
 
-	err := runTimer(ctx, time.Hour, false, false)
+	err := runTimer(ctx, time.Hour, false, false, false)
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
 
 	if got := exitCodeForCancelError(err); got != 143 {
 		t.Fatalf("runTimer() cancellation exit code = %d, want 143", got)
+	}
+}
+
+func TestShouldTriggerAlarm(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		interactive bool
+		quiet       bool
+		forceAlarm  bool
+		want        bool
+	}{
+		{
+			name:        "interactive non quiet without force",
+			interactive: true,
+			quiet:       false,
+			forceAlarm:  false,
+			want:        true,
+		},
+		{
+			name:        "interactive quiet without force",
+			interactive: true,
+			quiet:       true,
+			forceAlarm:  false,
+			want:        false,
+		},
+		{
+			name:        "non interactive quiet without force",
+			interactive: false,
+			quiet:       true,
+			forceAlarm:  false,
+			want:        false,
+		},
+		{
+			name:        "non interactive quiet with force",
+			interactive: false,
+			quiet:       true,
+			forceAlarm:  true,
+			want:        true,
+		},
+		{
+			name:        "interactive quiet with force",
+			interactive: true,
+			quiet:       true,
+			forceAlarm:  true,
+			want:        true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shouldTriggerAlarm(tc.interactive, tc.quiet, tc.forceAlarm)
+			if got != tc.want {
+				t.Fatalf("shouldTriggerAlarm(%v, %v, %v) = %v, want %v", tc.interactive, tc.quiet, tc.forceAlarm, got, tc.want)
+			}
+		})
 	}
 }
 

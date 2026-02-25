@@ -2,7 +2,7 @@ package main
 
 // timer is a simple countdown utility with visual feedback and audio alerts.
 // Usage: timer <duration>
-// Examples: timer 30s, timer 10m, timer 1.5h timer, 1h2m3s
+// Examples: timer 30s, timer 10m, timer 1.5h, timer 1h2m3s
 //
 // Features:
 // - Live countdown display in stdout and terminal title bar
@@ -31,7 +31,7 @@ const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
 	appVersion = "v1.0.0"
 	usageText  = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
-	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit\n  -q, --quiet      Suppress title, completion text, alarm, and cancel text"
+	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit\n  -q, --quiet      Suppress title, completion text, alarm, and cancel text\n      --alarm      Force alarm playback on completion even in quiet/non-TTY mode"
 )
 
 var (
@@ -67,7 +67,7 @@ func main() {
 		return
 	}
 
-	mode, duration, quiet, err := parseInvocation(os.Args)
+	mode, duration, quiet, forceAlarm, err := parseInvocation(os.Args)
 	if err != nil {
 		switch {
 		case errors.Is(err, errUsage):
@@ -106,7 +106,7 @@ func main() {
 
 	interactive := stdoutIsTTY()
 
-	if err := runTimer(ctx, duration, interactive, quiet); err != nil {
+	if err := runTimer(ctx, duration, interactive, quiet, forceAlarm); err != nil {
 		if interactive {
 			fmt.Print("\r\033[K")
 		}
@@ -139,25 +139,29 @@ func shouldRunInternalAlarm(args []string, envValue string) bool {
 // parseInvocation resolves CLI mode with explicit precedence:
 // help returns immediately, version beats unknown flags, and run mode
 // requires exactly one duration token with no unknown flags.
-func parseInvocation(args []string) (invocationMode, time.Duration, bool, error) {
+func parseInvocation(args []string) (invocationMode, time.Duration, bool, bool, error) {
 	if len(args) <= 1 {
-		return modeRun, 0, false, errUsage
+		return modeRun, 0, false, false, errUsage
 	}
 
 	hasVersion := false
 	isQuiet := false
+	hasAlarm := false
 	hasUnknownFlag := false
 	var durationToken string
 
 	for _, arg := range args[1:] {
 		switch arg {
 		case "-h", "--help":
-			return modeHelp, 0, false, nil
+			return modeHelp, 0, false, false, nil
 		case "-v", "--version":
 			hasVersion = true
 			continue
 		case "-q", "--quiet":
 			isQuiet = true
+			continue
+		case "--alarm":
+			hasAlarm = true
 			continue
 		}
 
@@ -167,23 +171,23 @@ func parseInvocation(args []string) (invocationMode, time.Duration, bool, error)
 		}
 
 		if durationToken != "" {
-			return modeRun, 0, false, errUsage
+			return modeRun, 0, false, false, errUsage
 		}
 		durationToken = arg
 	}
 
 	if hasVersion {
-		return modeVersion, 0, isQuiet, nil
+		return modeVersion, 0, isQuiet, hasAlarm, nil
 	}
 	if hasUnknownFlag || durationToken == "" {
-		return modeRun, 0, false, errUsage
+		return modeRun, 0, false, false, errUsage
 	}
 
 	duration, err := parseDurationToken(durationToken)
 	if err != nil {
-		return modeRun, 0, false, err
+		return modeRun, 0, false, false, err
 	}
-	return modeRun, duration, isQuiet, nil
+	return modeRun, duration, isQuiet, hasAlarm, nil
 }
 
 func parseDurationToken(token string) (time.Duration, error) {
@@ -208,7 +212,7 @@ func isPotentialNegativeDuration(arg string) bool {
 	return (next >= '0' && next <= '9') || next == '.'
 }
 
-func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool) error {
+func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool) error {
 	var sleepInhibitor *exec.Cmd
 	if shouldStartSleepInhibitor(runtime.GOOS, interactive) {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
@@ -245,8 +249,10 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool, qui
 				fmt.Print("\r\033[K")
 				if !quiet {
 					fmt.Println("timer complete")
-					startAlarmProcess()
 				}
+			}
+			if shouldTriggerAlarm(interactive, quiet, forceAlarm) {
+				startAlarmProcess()
 			}
 			return nil
 
@@ -280,6 +286,10 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool, qui
 
 func shouldStartSleepInhibitor(goos string, interactive bool) bool {
 	return goos == "darwin" && interactive
+}
+
+func shouldTriggerAlarm(interactive bool, quiet bool, forceAlarm bool) bool {
+	return forceAlarm || (interactive && !quiet)
 }
 
 func stdoutIsTTY() bool {

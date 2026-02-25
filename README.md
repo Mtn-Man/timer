@@ -8,8 +8,9 @@ A simple countdown timer utility for the command line with visual feedback and a
 - Graceful cancellation via Ctrl+C
 - Audio alert on completion (best-effort, platform-specific backend)
 - Optional `-q`/`--quiet` mode for inline countdown only
+- Optional `--alarm` to force alarm playback on completion
 - Ceiling-based display (never shows 00:00:00 while time remains)
-- Quiet mode when piped or redirected (no countdown output, no audio)
+- Quiet mode when piped or redirected (no countdown output, no audio unless `--alarm`)
 - Clean, minimal interface
 
 ## Installation
@@ -96,6 +97,7 @@ timer <duration>
 timer --help
 timer --version
 timer --quiet <duration>
+timer --alarm <duration>
 ```
 
 ### Examples
@@ -107,6 +109,7 @@ timer 90m      # 90 minutes
 timer --help   # Show help
 timer -v       # Show version (e.g.  timer v1.0.0)
 timer -q 5m    # Quiet mode: inline countdown only
+timer --alarm 5m # Force alarm playback even in quiet/non-TTY mode
 ```
 
 The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
@@ -116,6 +119,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 - `-h`, `--help`: Show help and exit
 - `-v`, `--version`: Show version (`timer v1.0.0`) and exit
 - `-q`, `--quiet`: Interactive inline countdown only (no title updates, completion line, alarm, or cancel text)
+- `--alarm`: Force alarm playback on completion even in `--quiet` or non-TTY mode
 
 ## Requirements
 
@@ -134,6 +138,9 @@ no title updates, no completion line, no alarm, and no cancel text.
 
 When stdout is not a TTY (for example, redirected or piped), the timer switches to a quiet mode:
 it does not emit countdown/title updates, completion output, or alarm audio.
+
+When `--alarm` is provided, alarm playback is still attempted on completion in `--quiet` and non-TTY modes.
+This only affects alarm behavior; output suppression remains unchanged.
 
 Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode, the current line is cleared and `timer cancelled` is printed, then the process exits with code 130. In `--quiet` mode and non-TTY mode, cancellation text is suppressed.
 If the process receives SIGTERM, it exits with code 143.
