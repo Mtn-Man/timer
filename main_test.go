@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -209,6 +210,31 @@ func TestAlarmCandidatesForUnknownGOOS(t *testing.T) {
 	got := alarmCandidatesForGOOS("unknown-os")
 	if got != nil {
 		t.Fatalf("alarmCandidatesForGOOS() = %v, want nil", got)
+	}
+}
+
+func TestIsTerminal_NonTTYDescriptors(t *testing.T) {
+	t.Parallel()
+
+	tempFile, err := os.CreateTemp(t.TempDir(), "stdout-like")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	defer func() { _ = tempFile.Close() }()
+
+	if isTerminal(tempFile.Fd()) {
+		t.Fatal("isTerminal() = true for regular file, want false")
+	}
+
+	pipeReader, pipeWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Pipe() error = %v", err)
+	}
+	defer func() { _ = pipeReader.Close() }()
+	defer func() { _ = pipeWriter.Close() }()
+
+	if isTerminal(pipeWriter.Fd()) {
+		t.Fatal("isTerminal() = true for pipe writer, want false")
 	}
 }
 

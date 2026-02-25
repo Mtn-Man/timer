@@ -23,6 +23,8 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
@@ -235,12 +237,11 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool) err
 }
 
 func stdoutIsTTY() bool {
-	fileInfo, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
+	return isTerminal(os.Stdout.Fd())
+}
 
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+func isTerminal(fd uintptr) bool {
+	return term.IsTerminal(int(fd))
 }
 
 // startAlarmProcess launches a detached child process that plays alert audio.
