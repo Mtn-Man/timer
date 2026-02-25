@@ -2,7 +2,7 @@ package main
 
 // timer is a simple countdown utility with visual feedback and audio alerts.
 // Usage: timer <duration>
-// Examples: timer 30s, timer 10m, timer 1.5h
+// Examples: timer 30s, timer 10m, timer 1.5h timer, 1h2m3s
 //
 // Features:
 // - Live countdown display in stdout and terminal title bar
