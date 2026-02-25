@@ -9,7 +9,7 @@ package main
 // - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
-// - Prevent sleep on macOS while timer is active in interactive mode
+// - Prevent sleep on macOS while timer is active (interactive by default, or forced with --awake)
 // - Non-TTY-safe behavior: disables interactive UI/output/alerts
 
 import (
@@ -68,6 +68,7 @@ type invocation struct {
 	duration   time.Duration
 	quiet      bool
 	forceAlarm bool
+	forceAwake bool
 }
 
 type cliFlag struct {
@@ -81,6 +82,7 @@ var cliFlags = []cliFlag{
 	{short: "-v", long: "--version", description: "Show version and exit"},
 	{short: "-q", long: "--quiet", description: "Suppress title, completion text, alarm, and cancel text"},
 	{long: "--alarm", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
+	{long: "--awake", description: "Force sleep inhibition attempt even in non-TTY mode (darwin only)"},
 }
 
 func main() {
@@ -111,6 +113,9 @@ func main() {
 		fmt.Print(formatVersionLine(version))
 		return
 	}
+	if inv.forceAwake && runtime.GOOS != "darwin" {
+		fmt.Fprintln(os.Stderr, awakeUnsupportedWarning(runtime.GOOS))
+	}
 
 	ctx, cancel := context.WithCancelCause(context.Background())
 	sigCh := make(chan os.Signal, 1)
@@ -128,7 +133,7 @@ func main() {
 
 	interactive := stdoutIsTTY()
 
-	if err := runTimer(ctx, inv.duration, interactive, inv.quiet, inv.forceAlarm); err != nil {
+	if err := runTimer(ctx, inv.duration, interactive, inv.quiet, inv.forceAlarm, inv.forceAwake); err != nil {
 		if interactive {
 			fmt.Print("\r\033[K")
 		}
@@ -181,6 +186,10 @@ func formatVersionLine(v string) string {
 	return fmt.Sprintf("timer %s\n", v)
 }
 
+func awakeUnsupportedWarning(_ string) string {
+	return "Warning: --awake sleep inhibition is only supported on darwin; continuing without sleep inhibition"
+}
+
 // parseInvocation resolves CLI mode with explicit precedence:
 // help returns immediately, version beats unknown flags, and run mode
 // requires exactly one duration token with no unknown flags.
@@ -209,6 +218,9 @@ func parseInvocation(args []string) (invocation, error) {
 		case "--alarm":
 			inv.forceAlarm = true
 			continue
+		case "--awake":
+			inv.forceAwake = true
+			continue
 		}
 
 		if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
@@ -223,7 +235,7 @@ func parseInvocation(args []string) (invocation, error) {
 	}
 
 	if hasVersion {
-		return invocation{mode: modeVersion, quiet: inv.quiet, forceAlarm: inv.forceAlarm}, nil
+		return invocation{mode: modeVersion, quiet: inv.quiet, forceAlarm: inv.forceAlarm, forceAwake: inv.forceAwake}, nil
 	}
 	if hasUnknownFlag || durationToken == "" {
 		return invocation{mode: modeRun}, errUsage
@@ -259,13 +271,13 @@ func isPotentialNegativeDuration(arg string) bool {
 	return (next >= '0' && next <= '9') || next == '.'
 }
 
-func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool) error {
-	return runTimerWithAlarmStarter(ctx, duration, interactive, quiet, forceAlarm, startAlarmProcess)
+func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool, forceAwake bool) error {
+	return runTimerWithAlarmStarter(ctx, duration, interactive, quiet, forceAlarm, forceAwake, startAlarmProcess)
 }
 
-func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool, alarmStarter func()) error {
+func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool, forceAwake bool, alarmStarter func()) error {
 	var sleepInhibitor *exec.Cmd
-	if shouldStartSleepInhibitor(runtime.GOOS, interactive) {
+	if shouldStartSleepInhibitor(runtime.GOOS, interactive, forceAwake) {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
 		if err := sleepInhibitor.Start(); err != nil {
 			sleepInhibitor = nil
@@ -338,8 +350,8 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, inter
 	}
 }
 
-func shouldStartSleepInhibitor(goos string, interactive bool) bool {
-	return goos == "darwin" && interactive
+func shouldStartSleepInhibitor(goos string, interactive bool, forceAwake bool) bool {
+	return goos == "darwin" && (interactive || forceAwake)
 }
 
 func shouldTriggerAlarm(interactive bool, quiet bool, forceAlarm bool) bool {

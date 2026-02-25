@@ -59,7 +59,8 @@ func TestRenderHelpText(t *testing.T) {
 		"  -h, --help       Show help and exit\n" +
 		"  -v, --version    Show version and exit\n" +
 		"  -q, --quiet      Suppress title, completion text, alarm, and cancel text\n" +
-		"      --alarm      Force alarm playback on completion even in quiet/non-TTY mode"
+		"      --alarm      Force alarm playback on completion even in quiet/non-TTY mode\n" +
+		"      --awake      Force sleep inhibition attempt even in non-TTY mode (darwin only)"
 
 	got := renderHelpText()
 	if got != want {
@@ -100,6 +101,16 @@ func TestFormatVersionLine(t *testing.T) {
 	}
 }
 
+func TestAwakeUnsupportedWarning(t *testing.T) {
+	t.Parallel()
+
+	want := "Warning: --awake sleep inhibition is only supported on darwin; continuing without sleep inhibition"
+	got := awakeUnsupportedWarning("linux")
+	if got != want {
+		t.Fatalf("awakeUnsupportedWarning() = %q, want %q", got, want)
+	}
+}
+
 func TestParseInvocation(t *testing.T) {
 	t.Parallel()
 
@@ -110,6 +121,7 @@ func TestParseInvocation(t *testing.T) {
 		wantDuration time.Duration
 		wantQuiet    bool
 		wantAlarm    bool
+		wantAwake    bool
 		wantErr      error
 	}{
 		{
@@ -156,6 +168,21 @@ func TestParseInvocation(t *testing.T) {
 			wantQuiet:    true,
 			wantDuration: 1 * time.Second,
 			wantAlarm:    true,
+		},
+		{
+			name:         "awake long flag with duration",
+			args:         []string{"timer", "--awake", "1s"},
+			wantMode:     modeRun,
+			wantDuration: 1 * time.Second,
+			wantAwake:    true,
+		},
+		{
+			name:         "awake and quiet with duration",
+			args:         []string{"timer", "--awake", "--quiet", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+			wantAwake:    true,
 		},
 		{
 			name:         "quiet and alarm with duration",
@@ -208,6 +235,11 @@ func TestParseInvocation(t *testing.T) {
 			wantErr: errUsage,
 		},
 		{
+			name:    "awake without duration is usage error",
+			args:    []string{"timer", "--awake"},
+			wantErr: errUsage,
+		},
+		{
 			name:     "help takes precedence over version",
 			args:     []string{"timer", "--help", "--version"},
 			wantMode: modeHelp,
@@ -215,6 +247,11 @@ func TestParseInvocation(t *testing.T) {
 		{
 			name:     "help takes precedence over alarm",
 			args:     []string{"timer", "--help", "--alarm"},
+			wantMode: modeHelp,
+		},
+		{
+			name:     "help takes precedence over awake",
+			args:     []string{"timer", "--help", "--awake"},
 			wantMode: modeHelp,
 		},
 		{
@@ -237,6 +274,12 @@ func TestParseInvocation(t *testing.T) {
 			args:      []string{"timer", "--version", "--alarm"},
 			wantMode:  modeVersion,
 			wantAlarm: true,
+		},
+		{
+			name:      "version with awake returns version mode with awake set",
+			args:      []string{"timer", "--version", "--awake"},
+			wantMode:  modeVersion,
+			wantAwake: true,
 		},
 		{
 			name:     "version takes precedence over prior unknown flag",
@@ -309,6 +352,9 @@ func TestParseInvocation(t *testing.T) {
 			}
 			if got.forceAlarm != tc.wantAlarm {
 				t.Fatalf("parseInvocation() alarm = %v, want %v", got.forceAlarm, tc.wantAlarm)
+			}
+			if got.forceAwake != tc.wantAwake {
+				t.Fatalf("parseInvocation() awake = %v, want %v", got.forceAwake, tc.wantAwake)
 			}
 		})
 	}
@@ -428,7 +474,7 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(signalCause{sig: syscall.SIGTERM})
 
-	err := runTimer(ctx, time.Hour, false, false, false)
+	err := runTimer(ctx, time.Hour, false, false, false, false)
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
@@ -442,7 +488,7 @@ func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 	ctx := context.Background()
 	alarmCalls := 0
 
-	err := runTimerWithAlarmStarter(ctx, 0, false, true, true, func() {
+	err := runTimerWithAlarmStarter(ctx, 0, false, true, true, false, func() {
 		alarmCalls++
 	})
 	if err != nil {
@@ -520,24 +566,35 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 		name        string
 		goos        string
 		interactive bool
+		forceAwake  bool
 		want        bool
 	}{
 		{
 			name:        "darwin interactive",
 			goos:        "darwin",
 			interactive: true,
+			forceAwake:  false,
 			want:        true,
 		},
 		{
 			name:        "darwin non interactive",
 			goos:        "darwin",
 			interactive: false,
+			forceAwake:  false,
 			want:        false,
 		},
 		{
-			name:        "linux interactive",
+			name:        "darwin non interactive with awake force",
+			goos:        "darwin",
+			interactive: false,
+			forceAwake:  true,
+			want:        true,
+		},
+		{
+			name:        "linux interactive with awake force",
 			goos:        "linux",
 			interactive: true,
+			forceAwake:  true,
 			want:        false,
 		},
 	}
@@ -547,9 +604,9 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldStartSleepInhibitor(tc.goos, tc.interactive)
+			got := shouldStartSleepInhibitor(tc.goos, tc.interactive, tc.forceAwake)
 			if got != tc.want {
-				t.Fatalf("shouldStartSleepInhibitor(%q, %v) = %v, want %v", tc.goos, tc.interactive, got, tc.want)
+				t.Fatalf("shouldStartSleepInhibitor(%q, %v, %v) = %v, want %v", tc.goos, tc.interactive, tc.forceAwake, got, tc.want)
 			}
 		})
 	}
