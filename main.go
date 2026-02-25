@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,7 +32,6 @@ const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
 	appVersion = "v1.0.0"
 	usageText  = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
-	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit\n  -q, --quiet      Suppress title, completion text, alarm, and cancel text\n      --alarm      Force alarm playback on completion even in quiet/non-TTY mode"
 )
 
 var (
@@ -68,6 +68,19 @@ type invocation struct {
 	forceAlarm bool
 }
 
+type cliFlag struct {
+	short       string
+	long        string
+	description string
+}
+
+var cliFlags = []cliFlag{
+	{short: "-h", long: "--help", description: "Show help and exit"},
+	{short: "-v", long: "--version", description: "Show version and exit"},
+	{short: "-q", long: "--quiet", description: "Suppress title, completion text, alarm, and cancel text"},
+	{long: "--alarm", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
+}
+
 func main() {
 	if shouldRunInternalAlarm(os.Args, os.Getenv(internalAlarmEnv)) {
 		runAlarmWorker()
@@ -89,7 +102,7 @@ func main() {
 		os.Exit(1)
 	}
 	if inv.mode == modeHelp {
-		fmt.Println(helpText)
+		fmt.Println(renderHelpText())
 		return
 	}
 	if inv.mode == modeVersion {
@@ -141,6 +154,25 @@ func exitCodeForCancelError(err error) int {
 // The args check distinguishes a worker invocation from a user invocation that inherits the env var.
 func shouldRunInternalAlarm(args []string, envValue string) bool {
 	return envValue == "1" && len(args) == 1
+}
+
+func renderHelpText() string {
+	var b strings.Builder
+	b.WriteString(usageText)
+	b.WriteString("\n\nFlags:\n")
+
+	for i, flag := range cliFlags {
+		label := fmt.Sprintf("%s, %s", flag.short, flag.long)
+		if flag.short == "" {
+			label = "    " + flag.long
+		}
+		fmt.Fprintf(&b, "  %-17s%s", label, flag.description)
+		if i < len(cliFlags)-1 {
+			b.WriteByte('\n')
+		}
+	}
+
+	return b.String()
 }
 
 // parseInvocation resolves CLI mode with explicit precedence:

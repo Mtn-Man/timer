@@ -52,6 +52,21 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 	}
 }
 
+func TestRenderHelpText(t *testing.T) {
+	t.Parallel()
+
+	want := usageText + "\n\nFlags:\n" +
+		"  -h, --help       Show help and exit\n" +
+		"  -v, --version    Show version and exit\n" +
+		"  -q, --quiet      Suppress title, completion text, alarm, and cancel text\n" +
+		"      --alarm      Force alarm playback on completion even in quiet/non-TTY mode"
+
+	got := renderHelpText()
+	if got != want {
+		t.Fatalf("renderHelpText() = %q, want %q", got, want)
+	}
+}
+
 func TestParseInvocation(t *testing.T) {
 	t.Parallel()
 
