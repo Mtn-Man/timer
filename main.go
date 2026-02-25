@@ -254,6 +254,10 @@ func isPotentialNegativeDuration(arg string) bool {
 }
 
 func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool) error {
+	return runTimerWithAlarmStarter(ctx, duration, interactive, quiet, forceAlarm, startAlarmProcess)
+}
+
+func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool, alarmStarter func()) error {
 	var sleepInhibitor *exec.Cmd
 	if shouldStartSleepInhibitor(runtime.GOOS, interactive) {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
@@ -286,14 +290,17 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool, qui
 			return context.Cause(ctx)
 
 		case <-done.C:
+			shouldPrintComplete := interactive && !quiet
+			shouldAlarm := shouldTriggerAlarm(interactive, quiet, forceAlarm)
+
 			if interactive {
 				fmt.Print("\r\033[K")
-				if !quiet {
-					fmt.Println("timer complete")
-				}
 			}
-			if shouldTriggerAlarm(interactive, quiet, forceAlarm) {
-				startAlarmProcess()
+			if shouldPrintComplete {
+				fmt.Println("timer complete")
+			}
+			if shouldAlarm {
+				alarmStarter()
 			}
 			return nil
 

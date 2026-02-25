@@ -405,6 +405,21 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	}
 }
 
+func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
+	ctx := context.Background()
+	alarmCalls := 0
+
+	err := runTimerWithAlarmStarter(ctx, 0, false, true, true, func() {
+		alarmCalls++
+	})
+	if err != nil {
+		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+	}
+	if alarmCalls != 1 {
+		t.Fatalf("runTimerWithAlarmStarter() alarm calls = %d, want 1", alarmCalls)
+	}
+}
+
 func TestShouldTriggerAlarm(t *testing.T) {
 	t.Parallel()
 
