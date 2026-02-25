@@ -7,6 +7,7 @@ A simple countdown timer utility for the command line with visual feedback and a
 - Live countdown display in both the terminal and title bar
 - Graceful cancellation via Ctrl+C
 - Audio alert on completion (best-effort, platform-specific backend)
+- Optional `-q`/`--quiet` mode for inline countdown only
 - Ceiling-based display (never shows 00:00:00 while time remains)
 - Quiet mode when piped or redirected (no countdown output, no audio)
 - Clean, minimal interface
@@ -94,6 +95,7 @@ go build -o timer .
 timer <duration>
 timer --help
 timer --version
+timer --quiet <duration>
 ```
 
 ### Examples
@@ -104,6 +106,7 @@ timer 1.5h     # 1.5 hours
 timer 90m      # 90 minutes
 timer --help   # Show help
 timer -v       # Show version (e.g.  timer v1.0.0)
+timer -q 5m    # Quiet mode: inline countdown only
 ```
 
 The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
@@ -112,6 +115,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 - `-h`, `--help`: Show help and exit
 - `-v`, `--version`: Show version (`timer v1.0.0`) and exit
+- `-q`, `--quiet`: Interactive inline countdown only (no title updates, completion line, alarm, or cancel text)
 
 ## Requirements
 
@@ -123,13 +127,17 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 The timer updates every 500ms, displaying the remaining time in `HH:MM:SS` format. The countdown appears both in your terminal output and in the terminal window's title bar.
 
-When the timer completes in interactive mode, it prints `timer complete`, plays an alert using the best available backend for your platform, and exits.
+In normal interactive mode, completion prints `timer complete`, plays an alert using the best available backend for your platform, and exits.
+
+With `-q` / `--quiet` in interactive mode, timer output is limited to the inline countdown:
+no title updates, no completion line, no alarm, and no cancel text.
 
 When stdout is not a TTY (for example, redirected or piped), the timer switches to a quiet mode:
 it does not emit countdown/title updates, completion output, or alarm audio.
 
-Press Ctrl+C at any time to cancel the timer gracefully. This prints `timer cancelled` and exits with code 130. If the process receives SIGTERM, it exits with code 143.
-Note that the terminal title bar may retain the last displayed time after cancellation depending on your terminal emulator.
+Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode, the current line is cleared and `timer cancelled` is printed, then the process exits with code 130. In `--quiet` mode and non-TTY mode, cancellation text is suppressed.
+If the process receives SIGTERM, it exits with code 143.
+Note that in normal interactive mode, the terminal title bar may retain the last displayed time after cancellation depending on your terminal emulator.
 
 ## License
 

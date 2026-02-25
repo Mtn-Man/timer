@@ -31,7 +31,7 @@ const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
 	appVersion = "v1.0.0"
 	usageText  = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
-	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit"
+	helpText   = usageText + "\n\nFlags:\n  -h, --help       Show help and exit\n  -v, --version    Show version and exit\n  -q, --quiet      Suppress title, completion text, alarm, and cancel text"
 )
 
 var (
@@ -67,7 +67,7 @@ func main() {
 		return
 	}
 
-	mode, duration, err := parseInvocation(os.Args)
+	mode, duration, quiet, err := parseInvocation(os.Args)
 	if err != nil {
 		switch {
 		case errors.Is(err, errUsage):
@@ -106,9 +106,11 @@ func main() {
 
 	interactive := stdoutIsTTY()
 
-	if err := runTimer(ctx, duration, interactive); err != nil {
+	if err := runTimer(ctx, duration, interactive, quiet); err != nil {
 		if interactive {
 			fmt.Print("\r\033[K")
+		}
+		if interactive && !quiet {
 			fmt.Println("timer cancelled")
 		}
 		os.Exit(exitCodeForCancelError(err))
@@ -137,21 +139,25 @@ func shouldRunInternalAlarm(args []string, envValue string) bool {
 // parseInvocation resolves CLI mode with explicit precedence:
 // help returns immediately, version beats unknown flags, and run mode
 // requires exactly one duration token with no unknown flags.
-func parseInvocation(args []string) (invocationMode, time.Duration, error) {
+func parseInvocation(args []string) (invocationMode, time.Duration, bool, error) {
 	if len(args) <= 1 {
-		return modeRun, 0, errUsage
+		return modeRun, 0, false, errUsage
 	}
 
 	hasVersion := false
+	isQuiet := false
 	hasUnknownFlag := false
 	var durationToken string
 
 	for _, arg := range args[1:] {
 		switch arg {
 		case "-h", "--help":
-			return modeHelp, 0, nil
+			return modeHelp, 0, false, nil
 		case "-v", "--version":
 			hasVersion = true
+			continue
+		case "-q", "--quiet":
+			isQuiet = true
 			continue
 		}
 
@@ -161,23 +167,23 @@ func parseInvocation(args []string) (invocationMode, time.Duration, error) {
 		}
 
 		if durationToken != "" {
-			return modeRun, 0, errUsage
+			return modeRun, 0, false, errUsage
 		}
 		durationToken = arg
 	}
 
 	if hasVersion {
-		return modeVersion, 0, nil
+		return modeVersion, 0, isQuiet, nil
 	}
 	if hasUnknownFlag || durationToken == "" {
-		return modeRun, 0, errUsage
+		return modeRun, 0, false, errUsage
 	}
 
 	duration, err := parseDurationToken(durationToken)
 	if err != nil {
-		return modeRun, 0, err
+		return modeRun, 0, false, err
 	}
-	return modeRun, duration, nil
+	return modeRun, duration, isQuiet, nil
 }
 
 func parseDurationToken(token string) (time.Duration, error) {
@@ -202,7 +208,7 @@ func isPotentialNegativeDuration(arg string) bool {
 	return (next >= '0' && next <= '9') || next == '.'
 }
 
-func runTimer(ctx context.Context, duration time.Duration, interactive bool) error {
+func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool) error {
 	var sleepInhibitor *exec.Cmd
 	if runtime.GOOS == "darwin" {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
@@ -237,8 +243,10 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool) err
 		case <-done.C:
 			if interactive {
 				fmt.Print("\r\033[K")
-				fmt.Println("timer complete")
-				startAlarmProcess()
+				if !quiet {
+					fmt.Println("timer complete")
+					startAlarmProcess()
+				}
 			}
 			return nil
 
@@ -259,9 +267,13 @@ func runTimer(ctx context.Context, duration time.Duration, interactive bool) err
 
 			timeStr := fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 
-			// Update title bar and terminal line in a single operation
-			// \033]0; sets title, \007 terminates the OSC sequence, \r returns to start of line
-			fmt.Printf("\033]0;%s\007\r\033[K%s", timeStr, timeStr)
+			if quiet {
+				fmt.Printf("\r\033[K%s", timeStr)
+			} else {
+				// Update title bar and terminal line in a single operation
+				// \033]0; sets title, \007 terminates the OSC sequence, \r returns to start of line
+				fmt.Printf("\033]0;%s\007\r\033[K%s", timeStr, timeStr)
+			}
 		}
 	}
 }

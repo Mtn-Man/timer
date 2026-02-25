@@ -60,6 +60,7 @@ func TestParseInvocation(t *testing.T) {
 		args         []string
 		wantMode     invocationMode
 		wantDuration time.Duration
+		wantQuiet    bool
 		wantErr      error
 	}{
 		{
@@ -91,6 +92,43 @@ func TestParseInvocation(t *testing.T) {
 			name:     "version flag wins with extra args",
 			args:     []string{"timer", "--version", "10s"},
 			wantMode: modeVersion,
+		},
+		{
+			name:         "quiet short flag with duration",
+			args:         []string{"timer", "-q", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+		},
+		{
+			name:         "quiet long flag with duration",
+			args:         []string{"timer", "--quiet", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+		},
+		{
+			name:         "duration then quiet flag",
+			args:         []string{"timer", "1s", "-q"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+		},
+		{
+			name:      "quiet and version returns version mode with quiet set",
+			args:      []string{"timer", "--quiet", "--version"},
+			wantMode:  modeVersion,
+			wantQuiet: true,
+		},
+		{
+			name:     "quiet and help returns help mode",
+			args:     []string{"timer", "--quiet", "--help"},
+			wantMode: modeHelp,
+		},
+		{
+			name:    "quiet without duration is usage error",
+			args:    []string{"timer", "-q"},
+			wantErr: errUsage,
 		},
 		{
 			name:     "help takes precedence over version",
@@ -155,7 +193,7 @@ func TestParseInvocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gotMode, gotDuration, err := parseInvocation(tc.args)
+			gotMode, gotDuration, gotQuiet, err := parseInvocation(tc.args)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("parseInvocation() error = %v, want %v", err, tc.wantErr)
@@ -171,6 +209,9 @@ func TestParseInvocation(t *testing.T) {
 			}
 			if gotDuration != tc.wantDuration {
 				t.Fatalf("parseInvocation() duration = %v, want %v", gotDuration, tc.wantDuration)
+			}
+			if gotQuiet != tc.wantQuiet {
+				t.Fatalf("parseInvocation() quiet = %v, want %v", gotQuiet, tc.wantQuiet)
 			}
 		})
 	}
@@ -290,7 +331,7 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(signalCause{sig: syscall.SIGTERM})
 
-	err := runTimer(ctx, time.Hour, false)
+	err := runTimer(ctx, time.Hour, false, false)
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
