@@ -219,272 +219,20 @@ func TestRenderInvocationError(t *testing.T) {
 	}
 }
 
-func TestParseInvocation(t *testing.T) {
-	t.Parallel()
+type parseInvocationTestCase struct {
+	name        string
+	args        []string
+	want        invocation
+	wantUnknown string
+	wantErr     error
+}
 
-	tests := []struct {
-		name         string
-		args         []string
-		wantMode     invocationMode
-		wantDuration time.Duration
-		wantQuiet    bool
-		wantAlarm    bool
-		wantAwake    bool
-		wantUnknown  string
-		wantErr      error
-	}{
-		{
-			name:     "help short flag",
-			args:     []string{"timer", "-h"},
-			wantMode: modeHelp,
-		},
-		{
-			name:     "help long flag",
-			args:     []string{"timer", "--help"},
-			wantMode: modeHelp,
-		},
-		{
-			name:     "help flag wins with extra args",
-			args:     []string{"timer", "--help", "10s"},
-			wantMode: modeHelp,
-		},
-		{
-			name:     "version short flag",
-			args:     []string{"timer", "-v"},
-			wantMode: modeVersion,
-		},
-		{
-			name:     "version long flag",
-			args:     []string{"timer", "--version"},
-			wantMode: modeVersion,
-		},
-		{
-			name:     "version flag wins with extra args",
-			args:     []string{"timer", "--version", "10s"},
-			wantMode: modeVersion,
-		},
-		{
-			name:         "alarm long flag with duration",
-			args:         []string{"timer", "--sound", "1s"},
-			wantMode:     modeRun,
-			wantDuration: 1 * time.Second,
-			wantAlarm:    true,
-		},
-		{
-			name:         "alarm short flag with duration",
-			args:         []string{"timer", "-s", "1s"},
-			wantMode:     modeRun,
-			wantDuration: 1 * time.Second,
-			wantAlarm:    true,
-		},
-		{
-			name:         "alarm and quiet with duration",
-			args:         []string{"timer", "--sound", "--quiet", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-			wantAlarm:    true,
-		},
-		{
-			name:         "alarm short and quiet with duration",
-			args:         []string{"timer", "-s", "-q", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-			wantAlarm:    true,
-		},
-		{
-			name:         "awake long flag with duration",
-			args:         []string{"timer", "--caffeinate", "1s"},
-			wantMode:     modeRun,
-			wantDuration: 1 * time.Second,
-			wantAwake:    true,
-		},
-		{
-			name:         "awake short flag with duration",
-			args:         []string{"timer", "-c", "1s"},
-			wantMode:     modeRun,
-			wantDuration: 1 * time.Second,
-			wantAwake:    true,
-		},
-		{
-			name:         "awake and quiet with duration",
-			args:         []string{"timer", "--caffeinate", "--quiet", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-			wantAwake:    true,
-		},
-		{
-			name:         "awake short and quiet with duration",
-			args:         []string{"timer", "-c", "-q", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-			wantAwake:    true,
-		},
-		{
-			name:         "quiet and alarm with duration",
-			args:         []string{"timer", "--quiet", "--sound", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-			wantAlarm:    true,
-		},
-		{
-			name:         "quiet short flag with duration",
-			args:         []string{"timer", "-q", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-		},
-		{
-			name:         "quiet long flag with duration",
-			args:         []string{"timer", "--quiet", "1s"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-		},
-		{
-			name:         "duration then quiet flag",
-			args:         []string{"timer", "1s", "-q"},
-			wantMode:     modeRun,
-			wantQuiet:    true,
-			wantDuration: 1 * time.Second,
-		},
-		{
-			name:      "quiet and version returns version mode with quiet set",
-			args:      []string{"timer", "--quiet", "--version"},
-			wantMode:  modeVersion,
-			wantQuiet: true,
-		},
-		{
-			name:     "quiet and help returns help mode",
-			args:     []string{"timer", "--quiet", "--help"},
-			wantMode: modeHelp,
-		},
-		{
-			name:    "quiet without duration is usage error",
-			args:    []string{"timer", "-q"},
-			wantErr: errUsage,
-		},
-		{
-			name:    "alarm without duration is usage error",
-			args:    []string{"timer", "--sound"},
-			wantErr: errUsage,
-		},
-		{
-			name:    "alarm short without duration is usage error",
-			args:    []string{"timer", "-s"},
-			wantErr: errUsage,
-		},
-		{
-			name:    "awake without duration is usage error",
-			args:    []string{"timer", "--caffeinate"},
-			wantErr: errUsage,
-		},
-		{
-			name:    "awake short without duration is usage error",
-			args:    []string{"timer", "-c"},
-			wantErr: errUsage,
-		},
-		{
-			name:     "help takes precedence over version",
-			args:     []string{"timer", "--help", "--version"},
-			wantMode: modeHelp,
-		},
-		{
-			name:     "help takes precedence over alarm",
-			args:     []string{"timer", "--help", "--sound"},
-			wantMode: modeHelp,
-		},
-		{
-			name:     "help takes precedence over awake",
-			args:     []string{"timer", "--help", "--caffeinate"},
-			wantMode: modeHelp,
-		},
-		{
-			name:        "unknown flag takes precedence over help",
-			args:        []string{"timer", "--help", "--wat"},
-			wantUnknown: "--wat",
-		},
-		{
-			name:        "unknown flag takes precedence over help when unknown comes first",
-			args:        []string{"timer", "--wat", "--help"},
-			wantUnknown: "--wat",
-		},
-		{
-			name:        "unknown flag takes precedence over version",
-			args:        []string{"timer", "--version", "--wat"},
-			wantUnknown: "--wat",
-		},
-		{
-			name:      "version with alarm returns version mode with alarm set",
-			args:      []string{"timer", "--version", "--sound"},
-			wantMode:  modeVersion,
-			wantAlarm: true,
-		},
-		{
-			name:      "version with short alarm returns version mode with alarm set",
-			args:      []string{"timer", "--version", "-s"},
-			wantMode:  modeVersion,
-			wantAlarm: true,
-		},
-		{
-			name:      "version with awake returns version mode with awake set",
-			args:      []string{"timer", "--version", "--caffeinate"},
-			wantMode:  modeVersion,
-			wantAwake: true,
-		},
-		{
-			name:      "version with short awake returns version mode with awake set",
-			args:      []string{"timer", "--version", "-c"},
-			wantMode:  modeVersion,
-			wantAwake: true,
-		},
-		{
-			name:        "unknown flag takes precedence over version when unknown comes first",
-			args:        []string{"timer", "--wat", "--version"},
-			wantUnknown: "--wat",
-		},
-		{
-			name:        "unknown short flag returns unknown option",
-			args:        []string{"timer", "-x"},
-			wantUnknown: "-x",
-		},
-		{
-			name:        "unknown long flag returns unknown option",
-			args:        []string{"timer", "--wat"},
-			wantUnknown: "--wat",
-		},
-		{
-			name:    "usage when no duration arg",
-			args:    []string{"timer"},
-			wantErr: errUsage,
-		},
-		{
-			name:         "valid duration invocation",
-			args:         []string{"timer", "1s"},
-			wantMode:     modeRun,
-			wantDuration: 1 * time.Second,
-		},
-		{
-			name:         "zero duration invocation",
-			args:         []string{"timer", "0s"},
-			wantMode:     modeRun,
-			wantDuration: 0,
-		},
-		{
-			name:    "invalid duration format",
-			args:    []string{"timer", "abc"},
-			wantErr: errInvalidDuration,
-		},
-		{
-			name:    "negative duration remains duration validation error",
-			args:    []string{"timer", "-1s"},
-			wantErr: errDurationMustBeAtLeastZero,
-		},
-	}
+func cliArgs(parts ...string) []string {
+	return append([]string{"timer"}, parts...)
+}
+
+func runParseInvocationCases(t *testing.T, tests []parseInvocationTestCase) {
+	t.Helper()
 
 	for _, tc := range tests {
 		tc := tc
@@ -492,7 +240,8 @@ func TestParseInvocation(t *testing.T) {
 			t.Parallel()
 
 			got, err := parseInvocation(tc.args)
-			if tc.wantUnknown != "" {
+			switch {
+			case tc.wantUnknown != "":
 				var unknownErr unknownOptionError
 				if !errors.As(err, &unknownErr) {
 					t.Fatalf("parseInvocation() error = %v, want unknown option error", err)
@@ -500,36 +249,94 @@ func TestParseInvocation(t *testing.T) {
 				if unknownErr.option != tc.wantUnknown {
 					t.Fatalf("parseInvocation() unknown option = %q, want %q", unknownErr.option, tc.wantUnknown)
 				}
-				return
-			}
-
-			if tc.wantErr != nil {
+			case tc.wantErr != nil:
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("parseInvocation() error = %v, want %v", err, tc.wantErr)
 				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("parseInvocation() unexpected error = %v", err)
-			}
-			if got.mode != tc.wantMode {
-				t.Fatalf("parseInvocation() mode = %v, want %v", got.mode, tc.wantMode)
-			}
-			if got.duration != tc.wantDuration {
-				t.Fatalf("parseInvocation() duration = %v, want %v", got.duration, tc.wantDuration)
-			}
-			if got.quiet != tc.wantQuiet {
-				t.Fatalf("parseInvocation() quiet = %v, want %v", got.quiet, tc.wantQuiet)
-			}
-			if got.forceAlarm != tc.wantAlarm {
-				t.Fatalf("parseInvocation() alarm = %v, want %v", got.forceAlarm, tc.wantAlarm)
-			}
-			if got.forceAwake != tc.wantAwake {
-				t.Fatalf("parseInvocation() awake = %v, want %v", got.forceAwake, tc.wantAwake)
+			default:
+				if err != nil {
+					t.Fatalf("parseInvocation() unexpected error = %v", err)
+				}
+				if got != tc.want {
+					t.Fatalf("parseInvocation() = %+v, want %+v", got, tc.want)
+				}
 			}
 		})
 	}
+}
+
+func TestParseInvocation_HelpAndVersionModes(t *testing.T) {
+	t.Parallel()
+
+	runParseInvocationCases(t, []parseInvocationTestCase{
+		{name: "help short flag", args: cliArgs("-h"), want: invocation{mode: modeHelp}},
+		{name: "help long flag", args: cliArgs("--help"), want: invocation{mode: modeHelp}},
+		{name: "help flag wins with extra args", args: cliArgs("--help", "10s"), want: invocation{mode: modeHelp}},
+		{name: "help takes precedence over version", args: cliArgs("--help", "--version"), want: invocation{mode: modeHelp}},
+		{name: "help takes precedence over alarm", args: cliArgs("--help", "--sound"), want: invocation{mode: modeHelp}},
+		{name: "help takes precedence over awake", args: cliArgs("--help", "--caffeinate"), want: invocation{mode: modeHelp}},
+		{name: "quiet and help returns help mode", args: cliArgs("--quiet", "--help"), want: invocation{mode: modeHelp}},
+		{name: "version short flag", args: cliArgs("-v"), want: invocation{mode: modeVersion}},
+		{name: "version long flag", args: cliArgs("--version"), want: invocation{mode: modeVersion}},
+		{name: "version flag wins with extra args", args: cliArgs("--version", "10s"), want: invocation{mode: modeVersion}},
+		{name: "quiet and version returns version mode with quiet set", args: cliArgs("--quiet", "--version"), want: invocation{mode: modeVersion, quiet: true}},
+		{name: "version with alarm returns version mode with alarm set", args: cliArgs("--version", "--sound"), want: invocation{mode: modeVersion, forceAlarm: true}},
+		{name: "version with short alarm returns version mode with alarm set", args: cliArgs("--version", "-s"), want: invocation{mode: modeVersion, forceAlarm: true}},
+		{name: "version with awake returns version mode with awake set", args: cliArgs("--version", "--caffeinate"), want: invocation{mode: modeVersion, forceAwake: true}},
+		{name: "version with short awake returns version mode with awake set", args: cliArgs("--version", "-c"), want: invocation{mode: modeVersion, forceAwake: true}},
+	})
+}
+
+func TestParseInvocation_RunModeFlagsAndDuration(t *testing.T) {
+	t.Parallel()
+
+	runParseInvocationCases(t, []parseInvocationTestCase{
+		{name: "valid duration invocation", args: cliArgs("1s"), want: invocation{mode: modeRun, duration: time.Second}},
+		{name: "zero duration invocation", args: cliArgs("0s"), want: invocation{mode: modeRun, duration: 0}},
+		{name: "quiet short flag with duration", args: cliArgs("-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
+		{name: "quiet long flag with duration", args: cliArgs("--quiet", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
+		{name: "duration then quiet flag", args: cliArgs("1s", "-q"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
+		{name: "alarm long flag with duration", args: cliArgs("--sound", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true}},
+		{name: "alarm short flag with duration", args: cliArgs("-s", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true}},
+		{name: "alarm and quiet with duration", args: cliArgs("--sound", "--quiet", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true}},
+		{name: "alarm short and quiet with duration", args: cliArgs("-s", "-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true}},
+		{name: "awake long flag with duration", args: cliArgs("--caffeinate", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAwake: true}},
+		{name: "awake short flag with duration", args: cliArgs("-c", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAwake: true}},
+		{name: "awake and quiet with duration", args: cliArgs("--caffeinate", "--quiet", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAwake: true}},
+		{name: "awake short and quiet with duration", args: cliArgs("-c", "-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAwake: true}},
+		{name: "quiet and alarm with duration", args: cliArgs("--quiet", "--sound", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true}},
+		{name: "alarm and awake together", args: cliArgs("--sound", "--caffeinate", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true, forceAwake: true}},
+	})
+}
+
+func TestParseInvocation_UnknownOptions(t *testing.T) {
+	t.Parallel()
+
+	runParseInvocationCases(t, []parseInvocationTestCase{
+		{name: "unknown short flag returns unknown option", args: cliArgs("-x"), wantUnknown: "-x"},
+		{name: "unknown long flag returns unknown option", args: cliArgs("--wat"), wantUnknown: "--wat"},
+		{name: "unknown flag takes precedence over help", args: cliArgs("--help", "--wat"), wantUnknown: "--wat"},
+		{name: "unknown flag takes precedence over help when unknown comes first", args: cliArgs("--wat", "--help"), wantUnknown: "--wat"},
+		{name: "unknown flag takes precedence over version", args: cliArgs("--version", "--wat"), wantUnknown: "--wat"},
+		{name: "unknown flag takes precedence over version when unknown comes first", args: cliArgs("--wat", "--version"), wantUnknown: "--wat"},
+		{name: "first unknown option is retained", args: cliArgs("--wat", "--oops", "1s"), wantUnknown: "--wat"},
+	})
+}
+
+func TestParseInvocation_UsageAndDurationErrors(t *testing.T) {
+	t.Parallel()
+
+	runParseInvocationCases(t, []parseInvocationTestCase{
+		{name: "usage when no args", args: cliArgs(), wantErr: errUsage},
+		{name: "quiet without duration is usage error", args: cliArgs("-q"), wantErr: errUsage},
+		{name: "alarm without duration is usage error", args: cliArgs("--sound"), wantErr: errUsage},
+		{name: "alarm short without duration is usage error", args: cliArgs("-s"), wantErr: errUsage},
+		{name: "awake without duration is usage error", args: cliArgs("--caffeinate"), wantErr: errUsage},
+		{name: "awake short without duration is usage error", args: cliArgs("-c"), wantErr: errUsage},
+		{name: "multiple duration tokens is usage error", args: cliArgs("1s", "2s"), wantErr: errUsage},
+		{name: "invalid duration format", args: cliArgs("abc"), wantErr: errInvalidDuration},
+		{name: "negative duration remains duration validation error", args: cliArgs("-1s"), wantErr: errDurationMustBeAtLeastZero},
+	})
 }
 
 func TestAlarmCandidatesForGOOS(t *testing.T) {
@@ -661,15 +468,24 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	}
 }
 
+func newStatusDisplay(writer io.Writer, interactive bool, supportsAdvanced bool) statusDisplay {
+	return statusDisplay{
+		writer:           writer,
+		interactive:      interactive,
+		supportsAdvanced: supportsAdvanced,
+	}
+}
+
+func newCapturedStatus(interactive bool, supportsAdvanced bool) (*bytes.Buffer, statusDisplay) {
+	var out bytes.Buffer
+	return &out, newStatusDisplay(&out, interactive, supportsAdvanced)
+}
+
 func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 	ctx := context.Background()
 	alarmCalls := 0
 
-	status := statusDisplay{
-		writer:           io.Discard,
-		interactive:      false,
-		supportsAdvanced: false,
-	}
+	status := newStatusDisplay(io.Discard, false, false)
 
 	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, true, false, func() {
 		alarmCalls++
@@ -717,11 +533,7 @@ func TestRunTimerWithAlarmStarter_DefaultAlarmRequiresBothStreamsTTY(t *testing.
 			t.Parallel()
 
 			alarmCalls := 0
-			status := statusDisplay{
-				writer:           io.Discard,
-				interactive:      tc.statusInteractive,
-				supportsAdvanced: false,
-			}
+			status := newStatusDisplay(io.Discard, tc.statusInteractive, false)
 
 			err := runTimerWithAlarmStarter(ctx, 0, status, tc.sideEffectsInteractive, false, false, false, func() {
 				alarmCalls++
@@ -860,12 +672,7 @@ func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	var out bytes.Buffer
-	status := statusDisplay{
-		writer:           &out,
-		interactive:      false,
-		supportsAdvanced: false,
-	}
+	out, status := newCapturedStatus(false, false)
 
 	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, func() {})
 	if err != nil {
@@ -882,12 +689,7 @@ func TestRunTimerWithAlarmStarter_NonTTYQuietSuppressesLifecycle(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	var out bytes.Buffer
-	status := statusDisplay{
-		writer:           &out,
-		interactive:      false,
-		supportsAdvanced: false,
-	}
+	out, status := newCapturedStatus(false, false)
 
 	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, func() {})
 	if err != nil {
@@ -904,12 +706,7 @@ func TestRunTimerWithAlarmStarter_NonTTYCancelLifecycleOutput(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(signalCause{sig: os.Interrupt})
 
-	var out bytes.Buffer
-	status := statusDisplay{
-		writer:           &out,
-		interactive:      false,
-		supportsAdvanced: false,
-	}
+	out, status := newCapturedStatus(false, false)
 
 	err := runTimerWithAlarmStarter(ctx, 10*time.Second, status, false, false, false, false, func() {})
 	if err == nil {
@@ -926,12 +723,7 @@ func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	var out bytes.Buffer
-	status := statusDisplay{
-		writer:           &out,
-		interactive:      true,
-		supportsAdvanced: false,
-	}
+	out, status := newCapturedStatus(true, false)
 
 	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, func() {})
 	if err != nil {
@@ -946,12 +738,7 @@ func TestRunTimerWithAlarmStarter_InteractiveQuietClearsStatusLine(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
-	var out bytes.Buffer
-	status := statusDisplay{
-		writer:           &out,
-		interactive:      true,
-		supportsAdvanced: true,
-	}
+	out, status := newCapturedStatus(true, true)
 
 	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, func() {})
 	if err != nil {
