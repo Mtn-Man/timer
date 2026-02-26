@@ -194,13 +194,25 @@ func TestRenderInvocationError(t *testing.T) {
 			name:         "usage error keeps usage text",
 			err:          errUsage,
 			wantMessage:  usageText + "\n",
-			wantExitCode: 1,
+			wantExitCode: 2,
 		},
 		{
 			name:         "invalid duration keeps prior message",
 			err:          errInvalidDuration,
 			wantMessage:  "Error: invalid duration format",
-			wantExitCode: 1,
+			wantExitCode: 2,
+		},
+		{
+			name:         "negative duration keeps prior message",
+			err:          errDurationMustBeAtLeastZero,
+			wantMessage:  "Error: duration must be >= 0",
+			wantExitCode: 2,
+		},
+		{
+			name:         "fallback parse rendering returns exit code 2",
+			err:          errors.New("x"),
+			wantMessage:  "Error: x",
+			wantExitCode: 2,
 		},
 	}
 

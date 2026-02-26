@@ -228,13 +228,13 @@ func renderInvocationError(err error) (string, int) {
 	case errors.As(err, &unknownErr):
 		return fmt.Sprintf("%s\n\n%s", unknownErr.Error(), renderHelpText()), 2
 	case errors.Is(err, errUsage):
-		return usageText + "\n", 1
+		return usageText + "\n", 2
 	case errors.Is(err, errInvalidDuration):
-		return "Error: invalid duration format", 1
+		return "Error: invalid duration format", 2
 	case errors.Is(err, errDurationMustBeAtLeastZero):
-		return "Error: duration must be >= 0", 1
+		return "Error: duration must be >= 0", 2
 	default:
-		return fmt.Sprintf("Error: %v", err), 1
+		return fmt.Sprintf("Error: %v", err), 2
 	}
 }
 
