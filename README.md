@@ -135,10 +135,11 @@ timer --sound <duration>
 timer -s <duration>
 timer --caffeinate <duration>
 timer -c <duration>
+timer -qs <duration>
 timer -- <duration>
 ```
 
-For ergonomics, options may be placed before or after the duration operand (for example, `timer -q 5m` and `timer 5m -q` are both supported).
+For ergonomics, options may be placed before or after the duration operand (for example, `timer -q 5m` and `timer 5m -q` are both supported). You can also combine short flags such as `-qs`.
 
 ### Examples
 ```bash
@@ -150,6 +151,7 @@ timer --help   # Show help
 timer -v       # Show version (e.g. timer dev or timer vX.Y.Z)
 timer -q 5m    # Quiet mode: inline countdown only
 timer -s 5m    # Force alarm playback even in quiet/non-TTY mode
+timer -qs 5m   # Combined short flags: quiet + force alarm
 timer --sound 5m # Force alarm playback even in quiet/non-TTY mode
 timer -c 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
 timer --caffeinate 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode

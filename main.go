@@ -246,6 +246,8 @@ func parseInvocation(args []string) (invocation, error) {
 		return invocation{mode: modeRun}, errUsage
 	}
 
+	args = preprocessCombinedShortFlags(args)
+
 	inv := invocation{
 		mode: modeRun,
 	}
@@ -313,6 +315,65 @@ func parseInvocation(args []string) (invocation, error) {
 	}
 	inv.duration = duration
 	return inv, nil
+}
+
+func preprocessCombinedShortFlags(args []string) []string {
+	if len(args) <= 1 {
+		return args
+	}
+
+	knownShortFlags := knownShortFlagsSet(cliFlags)
+	normalized := make([]string, 0, len(args))
+	normalized = append(normalized, args[0])
+
+	seenDoubleDash := false
+	for _, arg := range args[1:] {
+		if !seenDoubleDash && arg == "--" {
+			seenDoubleDash = true
+			normalized = append(normalized, arg)
+			continue
+		}
+
+		if !seenDoubleDash && shouldExpandCombinedShortFlag(arg, knownShortFlags) {
+			for _, shortRune := range arg[1:] {
+				normalized = append(normalized, "-"+string(shortRune))
+			}
+			continue
+		}
+
+		normalized = append(normalized, arg)
+	}
+
+	return normalized
+}
+
+func knownShortFlagsSet(flags []cliFlag) map[rune]struct{} {
+	known := make(map[rune]struct{})
+	for _, flag := range flags {
+		if len(flag.short) != 2 || flag.short[0] != '-' {
+			continue
+		}
+		known[rune(flag.short[1])] = struct{}{}
+	}
+	return known
+}
+
+func shouldExpandCombinedShortFlag(arg string, knownShortFlags map[rune]struct{}) bool {
+	if len(arg) < 3 || arg[0] != '-' || arg[1] == '-' {
+		return false
+	}
+
+	if isPotentialNegativeDuration(arg) {
+		return false
+	}
+
+	for _, shortRune := range arg[1:] {
+		if _, ok := knownShortFlags[shortRune]; !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func parseDurationToken(token string) (time.Duration, error) {
