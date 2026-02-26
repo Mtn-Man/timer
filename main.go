@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -407,7 +408,8 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 
 	var sleepInhibitor *exec.Cmd
 	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, status.interactive, forceAwake) {
-		sleepInhibitor = quietCmd("caffeinate", "-i")
+		pid := strconv.Itoa(os.Getpid())
+		sleepInhibitor = quietCmd("caffeinate", "-i", "-w", pid)
 		if err := sleepInhibitor.Start(); err != nil {
 			sleepInhibitor = nil
 		} else {
