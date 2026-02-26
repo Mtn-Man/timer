@@ -3,8 +3,8 @@
 package main
 
 // timer is a simple countdown utility with visual feedback and audio alerts.
-// Usage: timer <duration>
-// Examples: timer 30s, timer 10m, timer 1.5h, timer 1h2m3s
+// Usage: timer [options] <duration>
+// Examples: timer 30s, timer 10m, timer 1.5h, timer 1h2m3s, timer --quiet 3m, timer -q 3m
 //
 // Features:
 // - Live countdown display in stderr and terminal title bar
@@ -33,7 +33,7 @@ import (
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
-	usageText             = "Usage: timer <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
+	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
 	defaultVersion        = "dev"
 	develBuildInfoVersion = "(devel)"
 )

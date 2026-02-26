@@ -138,6 +138,8 @@ timer -c <duration>
 timer -- <duration>
 ```
 
+For ergonomics, options may be placed before or after the duration operand (for example, `timer -q 5m` and `timer 5m -q` are both supported).
+
 ### Examples
 ```bash
 timer 30s      # 30 seconds
