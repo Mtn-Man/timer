@@ -31,7 +31,7 @@ import (
 	"golang.org/x/term"
 )
 
-const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
+const internalAlarmArg = "__timer_internal_alarm_worker"
 const (
 	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30s, timer 10m, timer 1.5h, timer --quiet 5m"
 	defaultVersion        = "dev"
@@ -105,7 +105,7 @@ var cliFlags = []cliFlag{
 }
 
 func main() {
-	if shouldRunInternalAlarm(os.Args, os.Getenv(internalAlarmEnv)) {
+	if shouldRunInternalAlarm(os.Args) {
 		runAlarmWorker()
 		return
 	}
@@ -168,9 +168,9 @@ func exitCodeForCancelError(err error) int {
 }
 
 // shouldRunInternalAlarm reports whether to run as an internal alarm worker.
-// The args check distinguishes a worker invocation from a user invocation that inherits the env var.
-func shouldRunInternalAlarm(args []string, envValue string) bool {
-	return envValue == "1" && len(args) == 1
+// Internal mode is activated only by an exact hidden sentinel argument.
+func shouldRunInternalAlarm(args []string) bool {
+	return len(args) == 2 && args[1] == internalAlarmArg
 }
 
 func renderHelpText() string {
@@ -505,10 +505,14 @@ func startAlarmProcess() {
 		return
 	}
 
-	cmd := quietCmd(exe)
-	cmd.Env = append(os.Environ(), internalAlarmEnv+"=1")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd := newInternalAlarmCmd(exe)
 	_ = cmd.Start()
+}
+
+func newInternalAlarmCmd(exe string) *exec.Cmd {
+	cmd := quietCmd(exe, internalAlarmArg)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd
 }
 
 // runAlarmWorker plays an available alarm backend 4 times with 100ms pauses.

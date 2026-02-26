@@ -20,25 +20,26 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		env  string
 		want bool
 	}{
 		{
-			name: "worker mode when env is set and no user args",
-			args: []string{"timer"},
-			env:  "1",
+			name: "worker mode with exact hidden worker arg",
+			args: []string{"timer", internalAlarmArg},
 			want: true,
 		},
 		{
-			name: "normal mode when env is set but duration arg present",
-			args: []string{"timer", "1s"},
-			env:  "1",
+			name: "normal mode when no args",
+			args: []string{"timer"},
 			want: false,
 		},
 		{
-			name: "normal mode when env is not set",
-			args: []string{"timer"},
-			env:  "",
+			name: "normal mode with duration arg",
+			args: []string{"timer", "1s"},
+			want: false,
+		},
+		{
+			name: "normal mode when hidden worker arg has trailing args",
+			args: []string{"timer", internalAlarmArg, "1s"},
 			want: false,
 		},
 	}
@@ -47,11 +48,34 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := shouldRunInternalAlarm(tc.args, tc.env)
+			got := shouldRunInternalAlarm(tc.args)
 			if got != tc.want {
 				t.Fatalf("shouldRunInternalAlarm() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestNewInternalAlarmCmd(t *testing.T) {
+	t.Parallel()
+
+	cmd := newInternalAlarmCmd("/tmp/timer-bin")
+	if len(cmd.Args) != 2 {
+		t.Fatalf("newInternalAlarmCmd() args length = %d, want 2", len(cmd.Args))
+	}
+	if cmd.Args[0] != "/tmp/timer-bin" {
+		t.Fatalf("newInternalAlarmCmd() args[0] = %q, want %q", cmd.Args[0], "/tmp/timer-bin")
+	}
+	if cmd.Args[1] != internalAlarmArg {
+		t.Fatalf("newInternalAlarmCmd() args[1] = %q, want %q", cmd.Args[1], internalAlarmArg)
+	}
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+		t.Fatal("newInternalAlarmCmd() should set Setpgid=true")
+	}
+	for _, envVar := range cmd.Env {
+		if strings.HasPrefix(envVar, "TIMER_INTERNAL_ALARM=") {
+			t.Fatalf("newInternalAlarmCmd() should not set TIMER_INTERNAL_ALARM env, got %q", envVar)
+		}
 	}
 }
 
