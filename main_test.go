@@ -63,7 +63,7 @@ func TestRenderHelpText(t *testing.T) {
 		"  -v, --version    Show version and exit\n" +
 		"  -q, --quiet      TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm\n" +
 		"  -s, --sound      Force alarm playback on completion even in quiet/non-TTY mode\n" +
-		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)"
+		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)\n"
 
 	got := renderHelpText()
 	if got != want {
@@ -174,6 +174,51 @@ func TestAwakeUnsupportedWarning(t *testing.T) {
 	}
 }
 
+func TestRenderInvocationError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		err          error
+		wantMessage  string
+		wantExitCode int
+	}{
+		{
+			name:         "unknown option includes help and exit code 2",
+			err:          unknownOptionError{option: "--wat"},
+			wantMessage:  "unknown option: --wat\n\n" + renderHelpText(),
+			wantExitCode: 2,
+		},
+		{
+			name:         "usage error keeps usage text",
+			err:          errUsage,
+			wantMessage:  usageText + "\n",
+			wantExitCode: 1,
+		},
+		{
+			name:         "invalid duration keeps prior message",
+			err:          errInvalidDuration,
+			wantMessage:  "Error: invalid duration format",
+			wantExitCode: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotMessage, gotExitCode := renderInvocationError(tc.err)
+			if gotMessage != tc.wantMessage {
+				t.Fatalf("renderInvocationError() message = %q, want %q", gotMessage, tc.wantMessage)
+			}
+			if gotExitCode != tc.wantExitCode {
+				t.Fatalf("renderInvocationError() exit code = %d, want %d", gotExitCode, tc.wantExitCode)
+			}
+		})
+	}
+}
+
 func TestParseInvocation(t *testing.T) {
 	t.Parallel()
 
@@ -185,6 +230,7 @@ func TestParseInvocation(t *testing.T) {
 		wantQuiet    bool
 		wantAlarm    bool
 		wantAwake    bool
+		wantUnknown  string
 		wantErr      error
 	}{
 		{
@@ -358,19 +404,19 @@ func TestParseInvocation(t *testing.T) {
 			wantMode: modeHelp,
 		},
 		{
-			name:     "help takes precedence over unknown flag",
-			args:     []string{"timer", "--help", "--wat"},
-			wantMode: modeHelp,
+			name:        "unknown flag takes precedence over help",
+			args:        []string{"timer", "--help", "--wat"},
+			wantUnknown: "--wat",
 		},
 		{
-			name:     "help takes precedence over prior unknown flag",
-			args:     []string{"timer", "--wat", "--help"},
-			wantMode: modeHelp,
+			name:        "unknown flag takes precedence over help when unknown comes first",
+			args:        []string{"timer", "--wat", "--help"},
+			wantUnknown: "--wat",
 		},
 		{
-			name:     "version takes precedence over unknown flag",
-			args:     []string{"timer", "--version", "--wat"},
-			wantMode: modeVersion,
+			name:        "unknown flag takes precedence over version",
+			args:        []string{"timer", "--version", "--wat"},
+			wantUnknown: "--wat",
 		},
 		{
 			name:      "version with alarm returns version mode with alarm set",
@@ -397,19 +443,19 @@ func TestParseInvocation(t *testing.T) {
 			wantAwake: true,
 		},
 		{
-			name:     "version takes precedence over prior unknown flag",
-			args:     []string{"timer", "--wat", "--version"},
-			wantMode: modeVersion,
+			name:        "unknown flag takes precedence over version when unknown comes first",
+			args:        []string{"timer", "--wat", "--version"},
+			wantUnknown: "--wat",
 		},
 		{
-			name:    "unknown short flag is usage error",
-			args:    []string{"timer", "-x"},
-			wantErr: errUsage,
+			name:        "unknown short flag returns unknown option",
+			args:        []string{"timer", "-x"},
+			wantUnknown: "-x",
 		},
 		{
-			name:    "unknown long flag is usage error",
-			args:    []string{"timer", "--wat"},
-			wantErr: errUsage,
+			name:        "unknown long flag returns unknown option",
+			args:        []string{"timer", "--wat"},
+			wantUnknown: "--wat",
 		},
 		{
 			name:    "usage when no duration arg",
@@ -446,6 +492,17 @@ func TestParseInvocation(t *testing.T) {
 			t.Parallel()
 
 			got, err := parseInvocation(tc.args)
+			if tc.wantUnknown != "" {
+				var unknownErr unknownOptionError
+				if !errors.As(err, &unknownErr) {
+					t.Fatalf("parseInvocation() error = %v, want unknown option error", err)
+				}
+				if unknownErr.option != tc.wantUnknown {
+					t.Fatalf("parseInvocation() unknown option = %q, want %q", unknownErr.option, tc.wantUnknown)
+				}
+				return
+			}
+
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("parseInvocation() error = %v, want %v", err, tc.wantErr)

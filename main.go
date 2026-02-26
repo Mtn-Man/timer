@@ -60,6 +60,14 @@ func (c signalCause) Error() string {
 	return fmt.Sprintf("cancelled by signal %v", c.sig)
 }
 
+type unknownOptionError struct {
+	option string
+}
+
+func (e unknownOptionError) Error() string {
+	return fmt.Sprintf("unknown option: %s", e.option)
+}
+
 type invocationMode int
 
 const (
@@ -104,17 +112,9 @@ func main() {
 
 	inv, err := parseInvocation(os.Args)
 	if err != nil {
-		switch {
-		case errors.Is(err, errUsage):
-			fmt.Fprintln(os.Stderr, usageText)
-		case errors.Is(err, errInvalidDuration):
-			fmt.Fprintln(os.Stderr, "Error: invalid duration format")
-		case errors.Is(err, errDurationMustBeAtLeastZero):
-			fmt.Fprintln(os.Stderr, "Error: duration must be >= 0")
-		default:
-			fmt.Fprintln(os.Stderr, "Error:", err)
-		}
-		os.Exit(1)
+		message, exitCode := renderInvocationError(err)
+		fmt.Fprintln(os.Stderr, message)
+		os.Exit(exitCode)
 	}
 	if inv.mode == modeHelp {
 		fmt.Println(renderHelpText())
@@ -188,6 +188,7 @@ func renderHelpText() string {
 			b.WriteByte('\n')
 		}
 	}
+	b.WriteByte('\n')
 
 	return b.String()
 }
@@ -221,8 +222,24 @@ func awakeUnsupportedWarning() string {
 	return "Warning: --caffeinate sleep inhibition is only supported on darwin; continuing without sleep inhibition"
 }
 
+func renderInvocationError(err error) (string, int) {
+	var unknownErr unknownOptionError
+	switch {
+	case errors.As(err, &unknownErr):
+		return fmt.Sprintf("%s\n\n%s", unknownErr.Error(), renderHelpText()), 2
+	case errors.Is(err, errUsage):
+		return usageText + "\n", 1
+	case errors.Is(err, errInvalidDuration):
+		return "Error: invalid duration format", 1
+	case errors.Is(err, errDurationMustBeAtLeastZero):
+		return "Error: duration must be >= 0", 1
+	default:
+		return fmt.Sprintf("Error: %v", err), 1
+	}
+}
+
 // parseInvocation resolves CLI mode with explicit precedence:
-// help returns immediately, version beats unknown flags, and run mode
+// unknown options beat help/version, then help beats version, and run mode
 // requires exactly one duration token with no unknown flags.
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) <= 1 {
@@ -232,14 +249,16 @@ func parseInvocation(args []string) (invocation, error) {
 	inv := invocation{
 		mode: modeRun,
 	}
+	hasHelp := false
 	hasVersion := false
-	hasUnknownFlag := false
+	var firstUnknownOption string
 	var durationToken string
 
 	for _, arg := range args[1:] {
 		switch arg {
 		case "-h", "--help":
-			return invocation{mode: modeHelp}, nil
+			hasHelp = true
+			continue
 		case "-v", "--version":
 			hasVersion = true
 			continue
@@ -255,7 +274,9 @@ func parseInvocation(args []string) (invocation, error) {
 		}
 
 		if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
-			hasUnknownFlag = true
+			if firstUnknownOption == "" {
+				firstUnknownOption = arg
+			}
 			continue
 		}
 
@@ -265,10 +286,16 @@ func parseInvocation(args []string) (invocation, error) {
 		durationToken = arg
 	}
 
+	if firstUnknownOption != "" {
+		return invocation{mode: modeRun}, unknownOptionError{option: firstUnknownOption}
+	}
+	if hasHelp {
+		return invocation{mode: modeHelp}, nil
+	}
 	if hasVersion {
 		return invocation{mode: modeVersion, quiet: inv.quiet, forceAlarm: inv.forceAlarm, forceAwake: inv.forceAwake}, nil
 	}
-	if hasUnknownFlag || durationToken == "" {
+	if durationToken == "" {
 		return invocation{mode: modeRun}, errUsage
 	}
 
