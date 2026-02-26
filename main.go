@@ -393,6 +393,7 @@ func formatRemainingTime(remaining time.Duration) string {
 
 func printComplete(status statusDisplay, quiet bool) {
 	if quiet {
+		clearInteractiveStatusLine(status)
 		return
 	}
 
@@ -406,6 +407,7 @@ func printComplete(status statusDisplay, quiet bool) {
 
 func printCancelled(status statusDisplay, quiet bool) {
 	if quiet {
+		clearInteractiveStatusLine(status)
 		return
 	}
 

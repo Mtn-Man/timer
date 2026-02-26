@@ -885,6 +885,26 @@ func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) 
 	}
 }
 
+func TestRunTimerWithAlarmStarter_InteractiveQuietClearsStatusLine(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var out bytes.Buffer
+	status := statusDisplay{
+		writer:           &out,
+		interactive:      true,
+		supportsAdvanced: true,
+	}
+
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, func() {})
+	if err != nil {
+		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+	}
+	if got := out.String(); got != "\r\033[K" {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, "\r\\033[K")
+	}
+}
+
 func TestShouldPrintLifecycleStart(t *testing.T) {
 	t.Parallel()
 
