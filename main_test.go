@@ -632,39 +632,60 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                   string
-		goos                   string
-		sideEffectsInteractive bool
-		forceAwake             bool
-		want                   bool
+		name              string
+		goos              string
+		stdoutInteractive bool
+		statusInteractive bool
+		forceAwake        bool
+		want              bool
 	}{
 		{
-			name:                   "darwin interactive",
-			goos:                   "darwin",
-			sideEffectsInteractive: true,
-			forceAwake:             false,
-			want:                   true,
+			name:              "darwin both streams interactive",
+			goos:              "darwin",
+			stdoutInteractive: true,
+			statusInteractive: true,
+			forceAwake:        false,
+			want:              true,
 		},
 		{
-			name:                   "darwin non interactive",
-			goos:                   "darwin",
-			sideEffectsInteractive: false,
-			forceAwake:             false,
-			want:                   false,
+			name:              "darwin stdout interactive only",
+			goos:              "darwin",
+			stdoutInteractive: true,
+			statusInteractive: false,
+			forceAwake:        false,
+			want:              false,
 		},
 		{
-			name:                   "darwin non interactive with awake force",
-			goos:                   "darwin",
-			sideEffectsInteractive: false,
-			forceAwake:             true,
-			want:                   true,
+			name:              "darwin stderr interactive only",
+			goos:              "darwin",
+			stdoutInteractive: false,
+			statusInteractive: true,
+			forceAwake:        false,
+			want:              false,
 		},
 		{
-			name:                   "linux interactive with awake force",
-			goos:                   "linux",
-			sideEffectsInteractive: true,
-			forceAwake:             true,
-			want:                   false,
+			name:              "darwin non interactive with awake force",
+			goos:              "darwin",
+			stdoutInteractive: false,
+			statusInteractive: false,
+			forceAwake:        true,
+			want:              true,
+		},
+		{
+			name:              "linux interactive with awake force",
+			goos:              "linux",
+			stdoutInteractive: true,
+			statusInteractive: true,
+			forceAwake:        true,
+			want:              false,
+		},
+		{
+			name:              "linux both streams interactive without force",
+			goos:              "linux",
+			stdoutInteractive: true,
+			statusInteractive: true,
+			forceAwake:        false,
+			want:              false,
 		},
 	}
 
@@ -673,9 +694,9 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldStartSleepInhibitor(tc.goos, tc.sideEffectsInteractive, tc.forceAwake)
+			got := shouldStartSleepInhibitor(tc.goos, tc.stdoutInteractive, tc.statusInteractive, tc.forceAwake)
 			if got != tc.want {
-				t.Fatalf("shouldStartSleepInhibitor(%q, %v, %v) = %v, want %v", tc.goos, tc.sideEffectsInteractive, tc.forceAwake, got, tc.want)
+				t.Fatalf("shouldStartSleepInhibitor(%q, %v, %v, %v) = %v, want %v", tc.goos, tc.stdoutInteractive, tc.statusInteractive, tc.forceAwake, got, tc.want)
 			}
 		})
 	}

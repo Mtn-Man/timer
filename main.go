@@ -11,7 +11,7 @@ package main
 // - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
-// - Prevent sleep on macOS while timer is active (interactive by default, or forced with --caffeinate)
+// - Prevent sleep on macOS while timer is active (when both streams are interactive by default, or forced with --caffeinate)
 // - Non-TTY-safe lifecycle logging (started/complete/cancelled) in stderr
 
 import (
@@ -342,8 +342,10 @@ func runTimer(ctx context.Context, duration time.Duration, status statusDisplay,
 }
 
 func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, alarmStarter func()) error {
+	bothStreamsInteractive := sideEffectsInteractive && status.interactive
+
 	var sleepInhibitor *exec.Cmd
-	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, forceAwake) {
+	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, status.interactive, forceAwake) {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
 		if err := sleepInhibitor.Start(); err != nil {
 			sleepInhibitor = nil
@@ -380,7 +382,7 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 
 		case <-done.C:
 			printComplete(status, quiet)
-			shouldAlarm := shouldTriggerAlarm(sideEffectsInteractive && status.interactive, quiet, forceAlarm)
+			shouldAlarm := shouldTriggerAlarm(bothStreamsInteractive, quiet, forceAlarm)
 			if shouldAlarm {
 				alarmStarter()
 			}
@@ -469,8 +471,8 @@ func shouldPrintLifecycleStart(interactive bool, quiet bool) bool {
 	return !interactive && !quiet
 }
 
-func shouldStartSleepInhibitor(goos string, sideEffectsInteractive bool, forceAwake bool) bool {
-	return goos == "darwin" && (sideEffectsInteractive || forceAwake)
+func shouldStartSleepInhibitor(goos string, stdoutInteractive bool, statusInteractive bool, forceAwake bool) bool {
+	return goos == "darwin" && ((stdoutInteractive && statusInteractive) || forceAwake)
 }
 
 func shouldTriggerAlarm(sideEffectsInteractive bool, quiet bool, forceAlarm bool) bool {
