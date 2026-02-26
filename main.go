@@ -33,7 +33,7 @@ import (
 
 const internalAlarmEnv = "TIMER_INTERNAL_ALARM"
 const (
-	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30s, timer 10m, timer 1.5h"
+	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30s, timer 10m, timer 1.5h, timer --quiet 5m"
 	defaultVersion        = "dev"
 	develBuildInfoVersion = "(devel)"
 )

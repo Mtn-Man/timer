@@ -127,7 +127,7 @@ When installed with `go install github.com/Mtn-Man/timer@<version>`, `--version`
 
 ## Usage
 ```bash
-timer <duration>
+timer [options] <duration>
 timer --help
 timer --version
 timer --quiet <duration>
