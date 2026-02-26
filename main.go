@@ -425,7 +425,7 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 	defer done.Stop()
 
 	if shouldPrintLifecycleStart(status.interactive, quiet) && ctx.Err() == nil {
-		fmt.Fprintf(status.writer, "timer: started (%s)\n", duration)
+		writeStatusf(status.writer, "timer: started (%s)\n", duration)
 	}
 
 	var tickC <-chan time.Time
@@ -469,15 +469,15 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 func renderInteractiveCountdown(status statusDisplay, timeStr string, quiet bool) {
 	if status.supportsAdvanced {
 		if quiet {
-			fmt.Fprintf(status.writer, "\r\033[K%s", timeStr)
+			writeStatusf(status.writer, "\r\033[K%s", timeStr)
 			return
 		}
 		// Update title bar and terminal line in a single operation.
 		// \033]0; sets title, \007 terminates the OSC sequence, \r returns to start of line.
-		fmt.Fprintf(status.writer, "\033]0;%s\007\r\033[K%s", timeStr, timeStr)
+		writeStatusf(status.writer, "\033]0;%s\007\r\033[K%s", timeStr, timeStr)
 		return
 	}
-	fmt.Fprintf(status.writer, "\r%s", timeStr)
+	writeStatusf(status.writer, "\r%s", timeStr)
 }
 
 func formatRemainingTime(remaining time.Duration) string {
@@ -497,10 +497,10 @@ func printComplete(status statusDisplay, quiet bool) {
 
 	if status.interactive {
 		clearInteractiveStatusLine(status)
-		fmt.Fprintln(status.writer, "timer complete")
+		writeStatusln(status.writer, "timer complete")
 		return
 	}
-	fmt.Fprintln(status.writer, "timer: complete")
+	writeStatusln(status.writer, "timer: complete")
 }
 
 func printCancelled(status statusDisplay, quiet bool) {
@@ -511,10 +511,10 @@ func printCancelled(status statusDisplay, quiet bool) {
 
 	if status.interactive {
 		clearInteractiveStatusLine(status)
-		fmt.Fprintln(status.writer, "timer cancelled")
+		writeStatusln(status.writer, "timer cancelled")
 		return
 	}
-	fmt.Fprintln(status.writer, "timer: cancelled")
+	writeStatusln(status.writer, "timer: cancelled")
 }
 
 func clearInteractiveStatusLine(status statusDisplay) {
@@ -522,10 +522,22 @@ func clearInteractiveStatusLine(status statusDisplay) {
 		return
 	}
 	if status.supportsAdvanced {
-		fmt.Fprint(status.writer, "\r\033[K")
+		writeStatus(status.writer, "\r\033[K")
 		return
 	}
-	fmt.Fprint(status.writer, "\r")
+	writeStatus(status.writer, "\r")
+}
+
+func writeStatus(writer io.Writer, s string) {
+	_, _ = fmt.Fprint(writer, s)
+}
+
+func writeStatusln(writer io.Writer, a ...any) {
+	_, _ = fmt.Fprintln(writer, a...)
+}
+
+func writeStatusf(writer io.Writer, format string, a ...any) {
+	_, _ = fmt.Fprintf(writer, format, a...)
 }
 
 func shouldPrintLifecycleStart(interactive bool, quiet bool) bool {
