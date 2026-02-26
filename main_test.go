@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -58,7 +61,7 @@ func TestRenderHelpText(t *testing.T) {
 	want := usageText + "\n\nFlags:\n" +
 		"  -h, --help       Show help and exit\n" +
 		"  -v, --version    Show version and exit\n" +
-		"  -q, --quiet      Suppress title, completion text, alarm, and cancel text\n" +
+		"  -q, --quiet      TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm\n" +
 		"      --alarm      Force alarm playback on completion even in quiet/non-TTY mode\n" +
 		"      --awake      Force sleep inhibition attempt even in non-TTY mode (darwin only)"
 
@@ -534,7 +537,12 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(signalCause{sig: syscall.SIGTERM})
 
-	err := runTimer(ctx, time.Hour, false, false, false, false)
+	status := statusDisplay{
+		writer:           io.Discard,
+		interactive:      false,
+		supportsAdvanced: false,
+	}
+	err := runTimer(ctx, time.Hour, status, false, false, false, false)
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
@@ -548,7 +556,13 @@ func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 	ctx := context.Background()
 	alarmCalls := 0
 
-	err := runTimerWithAlarmStarter(ctx, 0, false, true, true, false, func() {
+	status := statusDisplay{
+		writer:           io.Discard,
+		interactive:      false,
+		supportsAdvanced: false,
+	}
+
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, true, false, func() {
 		alarmCalls++
 	})
 	if err != nil {
@@ -559,50 +573,32 @@ func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 	}
 }
 
-func TestShouldTriggerAlarm(t *testing.T) {
-	t.Parallel()
+func TestRunTimerWithAlarmStarter_DefaultAlarmRequiresBothStreamsTTY(t *testing.T) {
+	ctx := context.Background()
 
 	tests := []struct {
-		name        string
-		interactive bool
-		quiet       bool
-		forceAlarm  bool
-		want        bool
+		name                   string
+		statusInteractive      bool
+		sideEffectsInteractive bool
+		wantAlarmCalls         int
 	}{
 		{
-			name:        "interactive non quiet without force",
-			interactive: true,
-			quiet:       false,
-			forceAlarm:  false,
-			want:        true,
+			name:                   "both streams interactive triggers alarm",
+			statusInteractive:      true,
+			sideEffectsInteractive: true,
+			wantAlarmCalls:         1,
 		},
 		{
-			name:        "interactive quiet without force",
-			interactive: true,
-			quiet:       true,
-			forceAlarm:  false,
-			want:        false,
+			name:                   "stderr redirected suppresses default alarm",
+			statusInteractive:      false,
+			sideEffectsInteractive: true,
+			wantAlarmCalls:         0,
 		},
 		{
-			name:        "non interactive quiet without force",
-			interactive: false,
-			quiet:       true,
-			forceAlarm:  false,
-			want:        false,
-		},
-		{
-			name:        "non interactive quiet with force",
-			interactive: false,
-			quiet:       true,
-			forceAlarm:  true,
-			want:        true,
-		},
-		{
-			name:        "interactive quiet with force",
-			interactive: true,
-			quiet:       true,
-			forceAlarm:  true,
-			want:        true,
+			name:                   "stdout redirected suppresses default alarm",
+			statusInteractive:      true,
+			sideEffectsInteractive: false,
+			wantAlarmCalls:         0,
 		},
 	}
 
@@ -611,9 +607,88 @@ func TestShouldTriggerAlarm(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldTriggerAlarm(tc.interactive, tc.quiet, tc.forceAlarm)
+			alarmCalls := 0
+			status := statusDisplay{
+				writer:           io.Discard,
+				interactive:      tc.statusInteractive,
+				supportsAdvanced: false,
+			}
+
+			err := runTimerWithAlarmStarter(ctx, 0, status, tc.sideEffectsInteractive, false, false, false, func() {
+				alarmCalls++
+			})
+			if err != nil {
+				t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+			}
+			if alarmCalls != tc.wantAlarmCalls {
+				t.Fatalf("runTimerWithAlarmStarter() alarm calls = %d, want %d", alarmCalls, tc.wantAlarmCalls)
+			}
+		})
+	}
+}
+
+func TestShouldTriggerAlarm(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                   string
+		sideEffectsInteractive bool
+		quiet                  bool
+		forceAlarm             bool
+		want                   bool
+	}{
+		{
+			name:                   "interactive non quiet without force",
+			sideEffectsInteractive: true,
+			quiet:                  false,
+			forceAlarm:             false,
+			want:                   true,
+		},
+		{
+			name:                   "interactive quiet without force",
+			sideEffectsInteractive: true,
+			quiet:                  true,
+			forceAlarm:             false,
+			want:                   false,
+		},
+		{
+			name:                   "non interactive non quiet without force",
+			sideEffectsInteractive: false,
+			quiet:                  false,
+			forceAlarm:             false,
+			want:                   false,
+		},
+		{
+			name:                   "non interactive quiet without force",
+			sideEffectsInteractive: false,
+			quiet:                  true,
+			forceAlarm:             false,
+			want:                   false,
+		},
+		{
+			name:                   "non interactive quiet with force",
+			sideEffectsInteractive: false,
+			quiet:                  true,
+			forceAlarm:             true,
+			want:                   true,
+		},
+		{
+			name:                   "interactive quiet with force",
+			sideEffectsInteractive: true,
+			quiet:                  true,
+			forceAlarm:             true,
+			want:                   true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shouldTriggerAlarm(tc.sideEffectsInteractive, tc.quiet, tc.forceAlarm)
 			if got != tc.want {
-				t.Fatalf("shouldTriggerAlarm(%v, %v, %v) = %v, want %v", tc.interactive, tc.quiet, tc.forceAlarm, got, tc.want)
+				t.Fatalf("shouldTriggerAlarm(%v, %v, %v) = %v, want %v", tc.sideEffectsInteractive, tc.quiet, tc.forceAlarm, got, tc.want)
 			}
 		})
 	}
@@ -623,39 +698,39 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		goos        string
-		interactive bool
-		forceAwake  bool
-		want        bool
+		name                   string
+		goos                   string
+		sideEffectsInteractive bool
+		forceAwake             bool
+		want                   bool
 	}{
 		{
-			name:        "darwin interactive",
-			goos:        "darwin",
-			interactive: true,
-			forceAwake:  false,
-			want:        true,
+			name:                   "darwin interactive",
+			goos:                   "darwin",
+			sideEffectsInteractive: true,
+			forceAwake:             false,
+			want:                   true,
 		},
 		{
-			name:        "darwin non interactive",
-			goos:        "darwin",
-			interactive: false,
-			forceAwake:  false,
-			want:        false,
+			name:                   "darwin non interactive",
+			goos:                   "darwin",
+			sideEffectsInteractive: false,
+			forceAwake:             false,
+			want:                   false,
 		},
 		{
-			name:        "darwin non interactive with awake force",
-			goos:        "darwin",
-			interactive: false,
-			forceAwake:  true,
-			want:        true,
+			name:                   "darwin non interactive with awake force",
+			goos:                   "darwin",
+			sideEffectsInteractive: false,
+			forceAwake:             true,
+			want:                   true,
 		},
 		{
-			name:        "linux interactive with awake force",
-			goos:        "linux",
-			interactive: true,
-			forceAwake:  true,
-			want:        false,
+			name:                   "linux interactive with awake force",
+			goos:                   "linux",
+			sideEffectsInteractive: true,
+			forceAwake:             true,
+			want:                   false,
 		},
 	}
 
@@ -664,9 +739,149 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldStartSleepInhibitor(tc.goos, tc.interactive, tc.forceAwake)
+			got := shouldStartSleepInhibitor(tc.goos, tc.sideEffectsInteractive, tc.forceAwake)
 			if got != tc.want {
-				t.Fatalf("shouldStartSleepInhibitor(%q, %v, %v) = %v, want %v", tc.goos, tc.interactive, tc.forceAwake, got, tc.want)
+				t.Fatalf("shouldStartSleepInhibitor(%q, %v, %v) = %v, want %v", tc.goos, tc.sideEffectsInteractive, tc.forceAwake, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var out bytes.Buffer
+	status := statusDisplay{
+		writer:           &out,
+		interactive:      false,
+		supportsAdvanced: false,
+	}
+
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, func() {})
+	if err != nil {
+		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+	}
+
+	want := "timer: started (0s)\ntimer: complete\n"
+	if got := out.String(); got != want {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, want)
+	}
+}
+
+func TestRunTimerWithAlarmStarter_NonTTYQuietSuppressesLifecycle(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var out bytes.Buffer
+	status := statusDisplay{
+		writer:           &out,
+		interactive:      false,
+		supportsAdvanced: false,
+	}
+
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, func() {})
+	if err != nil {
+		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want empty output", got)
+	}
+}
+
+func TestRunTimerWithAlarmStarter_NonTTYCancelLifecycleOutput(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(signalCause{sig: os.Interrupt})
+
+	var out bytes.Buffer
+	status := statusDisplay{
+		writer:           &out,
+		interactive:      false,
+		supportsAdvanced: false,
+	}
+
+	err := runTimerWithAlarmStarter(ctx, 10*time.Second, status, false, false, false, false, func() {})
+	if err == nil {
+		t.Fatal("runTimerWithAlarmStarter() error = nil, want cancellation cause")
+	}
+
+	want := "timer: cancelled\n"
+	if got := out.String(); got != want {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, want)
+	}
+}
+
+func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	var out bytes.Buffer
+	status := statusDisplay{
+		writer:           &out,
+		interactive:      true,
+		supportsAdvanced: false,
+	}
+
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, func() {})
+	if err != nil {
+		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+	}
+	if !strings.Contains(out.String(), "timer complete\n") {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want timer completion text", out.String())
+	}
+}
+
+func TestShouldPrintLifecycleStart(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		interactive bool
+		quiet       bool
+		want        bool
+	}{
+		{name: "non interactive non quiet", interactive: false, quiet: false, want: true},
+		{name: "non interactive quiet", interactive: false, quiet: true, want: false},
+		{name: "interactive non quiet", interactive: true, quiet: false, want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shouldPrintLifecycleStart(tc.interactive, tc.quiet)
+			if got != tc.want {
+				t.Fatalf("shouldPrintLifecycleStart(%v, %v) = %v, want %v", tc.interactive, tc.quiet, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSupportsAdvancedTerminal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		term string
+		want bool
+	}{
+		{name: "xterm supports advanced", term: "xterm-256color", want: true},
+		{name: "dumb does not support advanced", term: "dumb", want: false},
+		{name: "empty term does not support advanced", term: "", want: false},
+		{name: "whitespace and case are normalized", term: " DUMB ", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := supportsAdvancedTerminal(tc.term)
+			if got != tc.want {
+				t.Fatalf("supportsAdvancedTerminal(%q) = %v, want %v", tc.term, got, tc.want)
 			}
 		})
 	}

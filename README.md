@@ -4,14 +4,14 @@ A fast command-line countdown timer with live terminal feedback, graceful cancel
 
 ## Features
 
-- Live countdown display in both the terminal and title bar
+- Live countdown display in terminal status output (`stderr`) and title bar (when supported)
 - Graceful cancellation via Ctrl+C
 - Audio alert on completion (best-effort, platform-specific backend)
 - Optional `-q`/`--quiet` mode for inline countdown only
 - Optional `--alarm` to force alarm playback on completion
 - Optional `--awake` to force sleep-inhibition attempt in non-TTY mode (macOS only)
 - Ceiling-based display (never shows 00:00:00 while time remains)
-- Quiet mode when piped or redirected (no countdown output, no audio unless `--alarm`)
+- Non-TTY lifecycle logging by default (`started`/`complete`/`cancelled`)
 - Clean, minimal interface
 
 ## Quick Start
@@ -146,6 +146,7 @@ timer -v       # Show version (e.g. timer dev or timer vX.Y.Z)
 timer -q 5m    # Quiet mode: inline countdown only
 timer --alarm 5m # Force alarm playback even in quiet/non-TTY mode
 timer --awake 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
+timer 10m > /tmp/timer.out 2> /tmp/timer.status # Keep data (stdout) and status (stderr) separate
 ```
 
 The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
@@ -154,7 +155,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 - `-h`, `--help`: Show help and exit
 - `-v`, `--version`: Show version and exit (reports injected build version, module version when available, or `timer dev` for local non-injected builds)
-- `-q`, `--quiet`: Interactive inline countdown only (no title updates, completion line, alarm, or cancel text)
+- `-q`, `--quiet`: TTY: inline countdown only (no title updates, completion line, alarm, or cancel text). Non-TTY: suppress lifecycle status output.
 - `--alarm`: Force alarm playback on completion even in `--quiet` or non-TTY mode
 - `--awake`: Force sleep-inhibition attempt even in non-TTY mode (macOS only)
 
@@ -172,25 +173,31 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 ## How It Works
 
-The timer updates every 500ms, displaying the remaining time in `HH:MM:SS` format. The countdown appears both in your terminal output and in the terminal window's title bar.
+Run-mode status output is written to `stderr`, while `stdout` remains available for pipeline/data use.
+
+In interactive status mode (`stderr` is a TTY), the timer updates every 500ms in `HH:MM:SS` format. In normal mode, it updates both the terminal line and title bar (when terminal capabilities allow it).
 
 In normal interactive mode, completion prints `timer complete`, plays an alert using the best available backend for your platform, and exits.
 
 With `-q` / `--quiet` in interactive mode, timer output is limited to the inline countdown:
 no title updates, no completion line, no alarm, and no cancel text.
 
-When stdout is not a TTY (for example, redirected or piped), the timer switches to a quiet mode:
-it does not emit countdown/title updates, completion output, or alarm audio.
+When `stderr` is not a TTY (for example, redirected), the timer emits lifecycle-only status lines:
+`timer: started (...)`, `timer: complete`, and `timer: cancelled`.
+With `--quiet`, those non-TTY lifecycle lines are suppressed.
+
+Default alarm playback requires both `stdout` and `stderr` to be TTYs.
+So if either stream is piped or redirected, alarm does not auto-run unless explicitly requested with `--alarm`.
 
 When `--alarm` is provided, alarm playback is still attempted on completion in `--quiet` and non-TTY modes.
-This only affects alarm behavior; output suppression remains unchanged.
 
-On macOS, sleep inhibition is attempted during interactive runs. With `--awake`, the timer also attempts sleep inhibition in non-TTY/piped runs (best effort).
+On macOS, sleep inhibition is attempted during interactive `stdout` runs. With `--awake`, the timer also attempts sleep inhibition in non-TTY/piped runs (best effort).
 On non-macOS systems, `--awake` prints a warning and continues normally without sleep inhibition.
 
-Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode, the current line is cleared and `timer cancelled` is printed, then the process exits with code 130. In `--quiet` mode and non-TTY mode, cancellation text is suppressed.
+Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode, the current line is cleared and `timer cancelled` is printed, then the process exits with code 130. In non-TTY normal mode, `timer: cancelled` is emitted. In `--quiet` mode, cancellation text is suppressed.
 If the process receives SIGTERM, it exits with code 143.
 Note that in normal interactive mode, the terminal title bar may retain the last displayed time after cancellation depending on your terminal emulator.
+In `TERM=dumb`/minimal environments, advanced terminal control sequences are disabled.
 
 ## License
 

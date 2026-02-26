@@ -5,12 +5,12 @@ package main
 // Examples: timer 30s, timer 10m, timer 1.5h, timer 1h2m3s
 //
 // Features:
-// - Live countdown display in stdout and terminal title bar
+// - Live countdown display in stderr and terminal title bar
 // - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
 // - Prevent sleep on macOS while timer is active (interactive by default, or forced with --awake)
-// - Non-TTY-safe behavior: disables interactive UI/output/alerts
+// - Non-TTY-safe lifecycle logging (started/complete/cancelled) in stderr
 
 import (
 	"context"
@@ -80,10 +80,16 @@ type cliFlag struct {
 	description string
 }
 
+type statusDisplay struct {
+	writer           io.Writer
+	interactive      bool
+	supportsAdvanced bool
+}
+
 var cliFlags = []cliFlag{
 	{short: "-h", long: "--help", description: "Show help and exit"},
 	{short: "-v", long: "--version", description: "Show version and exit"},
-	{short: "-q", long: "--quiet", description: "Suppress title, completion text, alarm, and cancel text"},
+	{short: "-q", long: "--quiet", description: "TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm"},
 	{long: "--alarm", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
 	{long: "--awake", description: "Force sleep inhibition attempt even in non-TTY mode (darwin only)"},
 }
@@ -134,15 +140,14 @@ func main() {
 		cancel(signalCause{sig: sig})
 	}()
 
-	interactive := stdoutIsTTY()
+	status := statusDisplay{
+		writer:           os.Stderr,
+		interactive:      stderrIsTTY(),
+		supportsAdvanced: supportsAdvancedTerminal(os.Getenv("TERM")),
+	}
+	sideEffectsInteractive := stdoutIsTTY()
 
-	if err := runTimer(ctx, inv.duration, interactive, inv.quiet, inv.forceAlarm, inv.forceAwake); err != nil {
-		if interactive {
-			fmt.Print("\r\033[K")
-		}
-		if interactive && !inv.quiet {
-			fmt.Println("timer cancelled")
-		}
+	if err := runTimer(ctx, inv.duration, status, sideEffectsInteractive, inv.quiet, inv.forceAlarm, inv.forceAwake); err != nil {
 		os.Exit(exitCodeForCancelError(err))
 	}
 }
@@ -295,13 +300,13 @@ func isPotentialNegativeDuration(arg string) bool {
 	return (next >= '0' && next <= '9') || next == '.'
 }
 
-func runTimer(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool, forceAwake bool) error {
-	return runTimerWithAlarmStarter(ctx, duration, interactive, quiet, forceAlarm, forceAwake, startAlarmProcess)
+func runTimer(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool) error {
+	return runTimerWithAlarmStarter(ctx, duration, status, sideEffectsInteractive, quiet, forceAlarm, forceAwake, startAlarmProcess)
 }
 
-func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, interactive bool, quiet bool, forceAlarm bool, forceAwake bool, alarmStarter func()) error {
+func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, alarmStarter func()) error {
 	var sleepInhibitor *exec.Cmd
-	if shouldStartSleepInhibitor(runtime.GOOS, interactive, forceAwake) {
+	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, forceAwake) {
 		sleepInhibitor = quietCmd("caffeinate", "-i")
 		if err := sleepInhibitor.Start(); err != nil {
 			sleepInhibitor = nil
@@ -319,8 +324,12 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, inter
 	done := time.NewTimer(duration)
 	defer done.Stop()
 
+	if shouldPrintLifecycleStart(status.interactive, quiet) && ctx.Err() == nil {
+		fmt.Fprintf(status.writer, "timer: started (%s)\n", duration)
+	}
+
 	var tickC <-chan time.Time
-	if interactive {
+	if status.interactive {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		tickC = ticker.C
@@ -329,24 +338,22 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, inter
 	for {
 		select {
 		case <-ctx.Done():
+			printCancelled(status, quiet)
 			return context.Cause(ctx)
 
 		case <-done.C:
-			shouldPrintComplete := interactive && !quiet
-			shouldAlarm := shouldTriggerAlarm(interactive, quiet, forceAlarm)
-
-			if interactive {
-				fmt.Print("\r\033[K")
-			}
-			if shouldPrintComplete {
-				fmt.Println("timer complete")
-			}
+			printComplete(status, quiet)
+			shouldAlarm := shouldTriggerAlarm(sideEffectsInteractive && status.interactive, quiet, forceAlarm)
 			if shouldAlarm {
 				alarmStarter()
 			}
 			return nil
 
 		case <-tickC:
+			if !status.interactive {
+				continue
+			}
+
 			remaining := time.Until(deadline)
 
 			if remaining <= 0 {
@@ -354,36 +361,94 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, inter
 				continue
 			}
 
-			// Ceiling-based calculation for whole seconds
-			totalSeconds := int((remaining + time.Second - 1) / time.Second)
-
-			h := totalSeconds / 3600
-			m := (totalSeconds % 3600) / 60
-			s := totalSeconds % 60
-
-			timeStr := fmt.Sprintf("%02d:%02d:%02d", h, m, s)
-
-			if quiet {
-				fmt.Printf("\r\033[K%s", timeStr)
-			} else {
-				// Update title bar and terminal line in a single operation
-				// \033]0; sets title, \007 terminates the OSC sequence, \r returns to start of line
-				fmt.Printf("\033]0;%s\007\r\033[K%s", timeStr, timeStr)
-			}
+			renderInteractiveCountdown(status, formatRemainingTime(remaining), quiet)
 		}
 	}
 }
 
-func shouldStartSleepInhibitor(goos string, interactive bool, forceAwake bool) bool {
-	return goos == "darwin" && (interactive || forceAwake)
+func renderInteractiveCountdown(status statusDisplay, timeStr string, quiet bool) {
+	if status.supportsAdvanced {
+		if quiet {
+			fmt.Fprintf(status.writer, "\r\033[K%s", timeStr)
+			return
+		}
+		// Update title bar and terminal line in a single operation.
+		// \033]0; sets title, \007 terminates the OSC sequence, \r returns to start of line.
+		fmt.Fprintf(status.writer, "\033]0;%s\007\r\033[K%s", timeStr, timeStr)
+		return
+	}
+	fmt.Fprintf(status.writer, "\r%s", timeStr)
 }
 
-func shouldTriggerAlarm(interactive bool, quiet bool, forceAlarm bool) bool {
-	return forceAlarm || (interactive && !quiet)
+func formatRemainingTime(remaining time.Duration) string {
+	// Ceiling-based calculation for whole seconds.
+	totalSeconds := int((remaining + time.Second - 1) / time.Second)
+	h := totalSeconds / 3600
+	m := (totalSeconds % 3600) / 60
+	s := totalSeconds % 60
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+func printComplete(status statusDisplay, quiet bool) {
+	if quiet {
+		return
+	}
+
+	if status.interactive {
+		clearInteractiveStatusLine(status)
+		fmt.Fprintln(status.writer, "timer complete")
+		return
+	}
+	fmt.Fprintln(status.writer, "timer: complete")
+}
+
+func printCancelled(status statusDisplay, quiet bool) {
+	if quiet {
+		return
+	}
+
+	if status.interactive {
+		clearInteractiveStatusLine(status)
+		fmt.Fprintln(status.writer, "timer cancelled")
+		return
+	}
+	fmt.Fprintln(status.writer, "timer: cancelled")
+}
+
+func clearInteractiveStatusLine(status statusDisplay) {
+	if !status.interactive {
+		return
+	}
+	if status.supportsAdvanced {
+		fmt.Fprint(status.writer, "\r\033[K")
+		return
+	}
+	fmt.Fprint(status.writer, "\r")
+}
+
+func shouldPrintLifecycleStart(interactive bool, quiet bool) bool {
+	return !interactive && !quiet
+}
+
+func shouldStartSleepInhibitor(goos string, sideEffectsInteractive bool, forceAwake bool) bool {
+	return goos == "darwin" && (sideEffectsInteractive || forceAwake)
+}
+
+func shouldTriggerAlarm(sideEffectsInteractive bool, quiet bool, forceAlarm bool) bool {
+	return forceAlarm || (sideEffectsInteractive && !quiet)
 }
 
 func stdoutIsTTY() bool {
 	return isTerminal(os.Stdout.Fd())
+}
+
+func stderrIsTTY() bool {
+	return isTerminal(os.Stderr.Fd())
+}
+
+func supportsAdvancedTerminal(termName string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(termName))
+	return normalized != "" && normalized != "dumb"
 }
 
 func isTerminal(fd uintptr) bool {
