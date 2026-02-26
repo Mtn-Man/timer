@@ -135,6 +135,7 @@ timer --sound <duration>
 timer -s <duration>
 timer --caffeinate <duration>
 timer -c <duration>
+timer -- <duration>
 ```
 
 ### Examples
@@ -150,6 +151,8 @@ timer -s 5m    # Force alarm playback even in quiet/non-TTY mode
 timer --sound 5m # Force alarm playback even in quiet/non-TTY mode
 timer -c 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
 timer --caffeinate 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
+timer -- 10s   # End option parsing; treat following token as positional duration
+timer -- --help # Treat --help as positional token (invalid duration)
 timer 10m > /tmp/timer.out 2> /tmp/timer.status # Keep data (stdout) and status (stderr) separate
 ```
 
@@ -162,6 +165,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 - `-q`, `--quiet`: TTY: inline countdown only (no title updates, completion line, alarm, or cancel text). Non-TTY: suppress lifecycle status output.
 - `-s`, `--sound`: Force alarm playback on completion even in `--quiet` or non-TTY mode
 - `-c`, `--caffeinate`: Force sleep-inhibition attempt even in non-TTY mode (macOS only)
+- `--`: End option parsing; all following tokens are treated as positional arguments
 
 ## Requirements
 

@@ -188,7 +188,7 @@ func renderHelpText() string {
 			b.WriteByte('\n')
 		}
 	}
-	b.WriteByte('\n')
+	b.WriteString("\n\nNote: -- ends option parsing; subsequent tokens are treated as positional arguments.\n")
 
 	return b.String()
 }
@@ -239,8 +239,8 @@ func renderInvocationError(err error) (string, int) {
 }
 
 // parseInvocation resolves CLI mode with explicit precedence:
-// unknown options beat help/version, then help beats version, and run mode
-// requires exactly one duration token with no unknown flags.
+// unknown options (before "--") beat help/version, then help beats version.
+// Run mode requires exactly one duration token.
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) <= 1 {
 		return invocation{mode: modeRun}, errUsage
@@ -251,33 +251,41 @@ func parseInvocation(args []string) (invocation, error) {
 	}
 	hasHelp := false
 	hasVersion := false
+	seenDoubleDash := false
 	var firstUnknownOption string
 	var durationToken string
 
 	for _, arg := range args[1:] {
-		switch arg {
-		case "-h", "--help":
-			hasHelp = true
-			continue
-		case "-v", "--version":
-			hasVersion = true
-			continue
-		case "-q", "--quiet":
-			inv.quiet = true
-			continue
-		case "-s", "--sound":
-			inv.forceAlarm = true
-			continue
-		case "-c", "--caffeinate":
-			inv.forceAwake = true
+		if !seenDoubleDash && arg == "--" {
+			seenDoubleDash = true
 			continue
 		}
 
-		if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
-			if firstUnknownOption == "" {
-				firstUnknownOption = arg
+		if !seenDoubleDash {
+			switch arg {
+			case "-h", "--help":
+				hasHelp = true
+				continue
+			case "-v", "--version":
+				hasVersion = true
+				continue
+			case "-q", "--quiet":
+				inv.quiet = true
+				continue
+			case "-s", "--sound":
+				inv.forceAlarm = true
+				continue
+			case "-c", "--caffeinate":
+				inv.forceAwake = true
+				continue
 			}
-			continue
+
+			if len(arg) > 0 && arg[0] == '-' && !isPotentialNegativeDuration(arg) {
+				if firstUnknownOption == "" {
+					firstUnknownOption = arg
+				}
+				continue
+			}
 		}
 
 		if durationToken != "" {

@@ -63,7 +63,8 @@ func TestRenderHelpText(t *testing.T) {
 		"  -v, --version    Show version and exit\n" +
 		"  -q, --quiet      TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm\n" +
 		"  -s, --sound      Force alarm playback on completion even in quiet/non-TTY mode\n" +
-		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)\n"
+		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)\n\n" +
+		"Note: -- ends option parsing; subsequent tokens are treated as positional arguments.\n"
 
 	got := renderHelpText()
 	if got != want {
@@ -272,6 +273,7 @@ func TestParseInvocation_HelpAndVersionModes(t *testing.T) {
 		{name: "help short flag", args: cliArgs("-h"), want: invocation{mode: modeHelp}},
 		{name: "help long flag", args: cliArgs("--help"), want: invocation{mode: modeHelp}},
 		{name: "help flag wins with extra args", args: cliArgs("--help", "10s"), want: invocation{mode: modeHelp}},
+		{name: "help before double dash still returns help", args: cliArgs("--help", "--", "10s"), want: invocation{mode: modeHelp}},
 		{name: "help takes precedence over version", args: cliArgs("--help", "--version"), want: invocation{mode: modeHelp}},
 		{name: "help takes precedence over alarm", args: cliArgs("--help", "--sound"), want: invocation{mode: modeHelp}},
 		{name: "help takes precedence over awake", args: cliArgs("--help", "--caffeinate"), want: invocation{mode: modeHelp}},
@@ -279,11 +281,14 @@ func TestParseInvocation_HelpAndVersionModes(t *testing.T) {
 		{name: "version short flag", args: cliArgs("-v"), want: invocation{mode: modeVersion}},
 		{name: "version long flag", args: cliArgs("--version"), want: invocation{mode: modeVersion}},
 		{name: "version flag wins with extra args", args: cliArgs("--version", "10s"), want: invocation{mode: modeVersion}},
+		{name: "version before double dash ignores post-option-like token", args: cliArgs("--version", "--", "--wat"), want: invocation{mode: modeVersion}},
 		{name: "quiet and version returns version mode with quiet set", args: cliArgs("--quiet", "--version"), want: invocation{mode: modeVersion, quiet: true}},
 		{name: "version with alarm returns version mode with alarm set", args: cliArgs("--version", "--sound"), want: invocation{mode: modeVersion, forceAlarm: true}},
 		{name: "version with short alarm returns version mode with alarm set", args: cliArgs("--version", "-s"), want: invocation{mode: modeVersion, forceAlarm: true}},
 		{name: "version with awake returns version mode with awake set", args: cliArgs("--version", "--caffeinate"), want: invocation{mode: modeVersion, forceAwake: true}},
 		{name: "version with short awake returns version mode with awake set", args: cliArgs("--version", "-c"), want: invocation{mode: modeVersion, forceAwake: true}},
+		{name: "double dash then help token is positional and invalid duration", args: cliArgs("--", "--help"), wantErr: errInvalidDuration},
+		{name: "double dash then version token is positional and invalid duration", args: cliArgs("--", "--version"), wantErr: errInvalidDuration},
 	})
 }
 
@@ -293,8 +298,11 @@ func TestParseInvocation_RunModeFlagsAndDuration(t *testing.T) {
 	runParseInvocationCases(t, []parseInvocationTestCase{
 		{name: "valid duration invocation", args: cliArgs("1s"), want: invocation{mode: modeRun, duration: time.Second}},
 		{name: "zero duration invocation", args: cliArgs("0s"), want: invocation{mode: modeRun, duration: 0}},
+		{name: "double dash allows duration token", args: cliArgs("--", "1s"), want: invocation{mode: modeRun, duration: time.Second}},
+		{name: "double dash allows negative duration validation", args: cliArgs("--", "-1s"), wantErr: errDurationMustBeAtLeastZero},
 		{name: "quiet short flag with duration", args: cliArgs("-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
 		{name: "quiet long flag with duration", args: cliArgs("--quiet", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
+		{name: "quiet before double dash still applies", args: cliArgs("--quiet", "--", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
 		{name: "duration then quiet flag", args: cliArgs("1s", "-q"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
 		{name: "alarm long flag with duration", args: cliArgs("--sound", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true}},
 		{name: "alarm short flag with duration", args: cliArgs("-s", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true}},
@@ -315,11 +323,14 @@ func TestParseInvocation_UnknownOptions(t *testing.T) {
 	runParseInvocationCases(t, []parseInvocationTestCase{
 		{name: "unknown short flag returns unknown option", args: cliArgs("-x"), wantUnknown: "-x"},
 		{name: "unknown long flag returns unknown option", args: cliArgs("--wat"), wantUnknown: "--wat"},
+		{name: "unknown before double dash still returns unknown option", args: cliArgs("--wat", "--", "1s"), wantUnknown: "--wat"},
 		{name: "unknown flag takes precedence over help", args: cliArgs("--help", "--wat"), wantUnknown: "--wat"},
 		{name: "unknown flag takes precedence over help when unknown comes first", args: cliArgs("--wat", "--help"), wantUnknown: "--wat"},
 		{name: "unknown flag takes precedence over version", args: cliArgs("--version", "--wat"), wantUnknown: "--wat"},
 		{name: "unknown flag takes precedence over version when unknown comes first", args: cliArgs("--wat", "--version"), wantUnknown: "--wat"},
 		{name: "first unknown option is retained", args: cliArgs("--wat", "--oops", "1s"), wantUnknown: "--wat"},
+		{name: "double dash then unknown-looking token is positional invalid duration", args: cliArgs("--", "--wat"), wantErr: errInvalidDuration},
+		{name: "double dash positional unknown then extra positional is usage", args: cliArgs("--", "--wat", "--oops"), wantErr: errUsage},
 	})
 }
 
@@ -328,12 +339,14 @@ func TestParseInvocation_UsageAndDurationErrors(t *testing.T) {
 
 	runParseInvocationCases(t, []parseInvocationTestCase{
 		{name: "usage when no args", args: cliArgs(), wantErr: errUsage},
+		{name: "double dash alone is usage error", args: cliArgs("--"), wantErr: errUsage},
 		{name: "quiet without duration is usage error", args: cliArgs("-q"), wantErr: errUsage},
 		{name: "alarm without duration is usage error", args: cliArgs("--sound"), wantErr: errUsage},
 		{name: "alarm short without duration is usage error", args: cliArgs("-s"), wantErr: errUsage},
 		{name: "awake without duration is usage error", args: cliArgs("--caffeinate"), wantErr: errUsage},
 		{name: "awake short without duration is usage error", args: cliArgs("-c"), wantErr: errUsage},
 		{name: "multiple duration tokens is usage error", args: cliArgs("1s", "2s"), wantErr: errUsage},
+		{name: "double dash then multiple duration tokens is usage error", args: cliArgs("--", "1s", "2s"), wantErr: errUsage},
 		{name: "invalid duration format", args: cliArgs("abc"), wantErr: errInvalidDuration},
 		{name: "negative duration remains duration validation error", args: cliArgs("-1s"), wantErr: errDurationMustBeAtLeastZero},
 	})
