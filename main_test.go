@@ -62,8 +62,8 @@ func TestRenderHelpText(t *testing.T) {
 		"  -h, --help       Show help and exit\n" +
 		"  -v, --version    Show version and exit\n" +
 		"  -q, --quiet      TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm\n" +
-		"      --alarm      Force alarm playback on completion even in quiet/non-TTY mode\n" +
-		"      --awake      Force sleep inhibition attempt even in non-TTY mode (darwin only)"
+		"  -s, --sound      Force alarm playback on completion even in quiet/non-TTY mode\n" +
+		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)"
 
 	got := renderHelpText()
 	if got != want {
@@ -167,7 +167,7 @@ func TestResolveVersion(t *testing.T) {
 func TestAwakeUnsupportedWarning(t *testing.T) {
 	t.Parallel()
 
-	want := "Warning: --awake sleep inhibition is only supported on darwin; continuing without sleep inhibition"
+	want := "Warning: --caffeinate sleep inhibition is only supported on darwin; continuing without sleep inhibition"
 	got := awakeUnsupportedWarning()
 	if got != want {
 		t.Fatalf("awakeUnsupportedWarning() = %q, want %q", got, want)
@@ -219,14 +219,29 @@ func TestParseInvocation(t *testing.T) {
 		},
 		{
 			name:         "alarm long flag with duration",
-			args:         []string{"timer", "--alarm", "1s"},
+			args:         []string{"timer", "--sound", "1s"},
+			wantMode:     modeRun,
+			wantDuration: 1 * time.Second,
+			wantAlarm:    true,
+		},
+		{
+			name:         "alarm short flag with duration",
+			args:         []string{"timer", "-s", "1s"},
 			wantMode:     modeRun,
 			wantDuration: 1 * time.Second,
 			wantAlarm:    true,
 		},
 		{
 			name:         "alarm and quiet with duration",
-			args:         []string{"timer", "--alarm", "--quiet", "1s"},
+			args:         []string{"timer", "--sound", "--quiet", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+			wantAlarm:    true,
+		},
+		{
+			name:         "alarm short and quiet with duration",
+			args:         []string{"timer", "-s", "-q", "1s"},
 			wantMode:     modeRun,
 			wantQuiet:    true,
 			wantDuration: 1 * time.Second,
@@ -234,14 +249,29 @@ func TestParseInvocation(t *testing.T) {
 		},
 		{
 			name:         "awake long flag with duration",
-			args:         []string{"timer", "--awake", "1s"},
+			args:         []string{"timer", "--caffeinate", "1s"},
+			wantMode:     modeRun,
+			wantDuration: 1 * time.Second,
+			wantAwake:    true,
+		},
+		{
+			name:         "awake short flag with duration",
+			args:         []string{"timer", "-c", "1s"},
 			wantMode:     modeRun,
 			wantDuration: 1 * time.Second,
 			wantAwake:    true,
 		},
 		{
 			name:         "awake and quiet with duration",
-			args:         []string{"timer", "--awake", "--quiet", "1s"},
+			args:         []string{"timer", "--caffeinate", "--quiet", "1s"},
+			wantMode:     modeRun,
+			wantQuiet:    true,
+			wantDuration: 1 * time.Second,
+			wantAwake:    true,
+		},
+		{
+			name:         "awake short and quiet with duration",
+			args:         []string{"timer", "-c", "-q", "1s"},
 			wantMode:     modeRun,
 			wantQuiet:    true,
 			wantDuration: 1 * time.Second,
@@ -249,7 +279,7 @@ func TestParseInvocation(t *testing.T) {
 		},
 		{
 			name:         "quiet and alarm with duration",
-			args:         []string{"timer", "--quiet", "--alarm", "1s"},
+			args:         []string{"timer", "--quiet", "--sound", "1s"},
 			wantMode:     modeRun,
 			wantQuiet:    true,
 			wantDuration: 1 * time.Second,
@@ -294,12 +324,22 @@ func TestParseInvocation(t *testing.T) {
 		},
 		{
 			name:    "alarm without duration is usage error",
-			args:    []string{"timer", "--alarm"},
+			args:    []string{"timer", "--sound"},
+			wantErr: errUsage,
+		},
+		{
+			name:    "alarm short without duration is usage error",
+			args:    []string{"timer", "-s"},
 			wantErr: errUsage,
 		},
 		{
 			name:    "awake without duration is usage error",
-			args:    []string{"timer", "--awake"},
+			args:    []string{"timer", "--caffeinate"},
+			wantErr: errUsage,
+		},
+		{
+			name:    "awake short without duration is usage error",
+			args:    []string{"timer", "-c"},
 			wantErr: errUsage,
 		},
 		{
@@ -309,12 +349,12 @@ func TestParseInvocation(t *testing.T) {
 		},
 		{
 			name:     "help takes precedence over alarm",
-			args:     []string{"timer", "--help", "--alarm"},
+			args:     []string{"timer", "--help", "--sound"},
 			wantMode: modeHelp,
 		},
 		{
 			name:     "help takes precedence over awake",
-			args:     []string{"timer", "--help", "--awake"},
+			args:     []string{"timer", "--help", "--caffeinate"},
 			wantMode: modeHelp,
 		},
 		{
@@ -334,13 +374,25 @@ func TestParseInvocation(t *testing.T) {
 		},
 		{
 			name:      "version with alarm returns version mode with alarm set",
-			args:      []string{"timer", "--version", "--alarm"},
+			args:      []string{"timer", "--version", "--sound"},
+			wantMode:  modeVersion,
+			wantAlarm: true,
+		},
+		{
+			name:      "version with short alarm returns version mode with alarm set",
+			args:      []string{"timer", "--version", "-s"},
 			wantMode:  modeVersion,
 			wantAlarm: true,
 		},
 		{
 			name:      "version with awake returns version mode with awake set",
-			args:      []string{"timer", "--version", "--awake"},
+			args:      []string{"timer", "--version", "--caffeinate"},
+			wantMode:  modeVersion,
+			wantAwake: true,
+		},
+		{
+			name:      "version with short awake returns version mode with awake set",
+			args:      []string{"timer", "--version", "-c"},
 			wantMode:  modeVersion,
 			wantAwake: true,
 		},

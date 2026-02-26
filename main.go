@@ -1,3 +1,5 @@
+//go:build !windows
+
 package main
 
 // timer is a simple countdown utility with visual feedback and audio alerts.
@@ -9,7 +11,7 @@ package main
 // - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
-// - Prevent sleep on macOS while timer is active (interactive by default, or forced with --awake)
+// - Prevent sleep on macOS while timer is active (interactive by default, or forced with --caffeinate)
 // - Non-TTY-safe lifecycle logging (started/complete/cancelled) in stderr
 
 import (
@@ -90,8 +92,8 @@ var cliFlags = []cliFlag{
 	{short: "-h", long: "--help", description: "Show help and exit"},
 	{short: "-v", long: "--version", description: "Show version and exit"},
 	{short: "-q", long: "--quiet", description: "TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm"},
-	{long: "--alarm", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
-	{long: "--awake", description: "Force sleep inhibition attempt even in non-TTY mode (darwin only)"},
+	{short: "-s", long: "--sound", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
+	{short: "-c", long: "--caffeinate", description: "Force sleep inhibition attempt even in non-TTY mode (darwin only)"},
 }
 
 func main() {
@@ -216,7 +218,7 @@ func resolveVersion(buildVersion, moduleVersion string) string {
 }
 
 func awakeUnsupportedWarning() string {
-	return "Warning: --awake sleep inhibition is only supported on darwin; continuing without sleep inhibition"
+	return "Warning: --caffeinate sleep inhibition is only supported on darwin; continuing without sleep inhibition"
 }
 
 // parseInvocation resolves CLI mode with explicit precedence:
@@ -244,10 +246,10 @@ func parseInvocation(args []string) (invocation, error) {
 		case "-q", "--quiet":
 			inv.quiet = true
 			continue
-		case "--alarm":
+		case "-s", "--sound":
 			inv.forceAlarm = true
 			continue
-		case "--awake":
+		case "-c", "--caffeinate":
 			inv.forceAwake = true
 			continue
 		}
