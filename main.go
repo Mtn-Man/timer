@@ -4,7 +4,7 @@ package main
 
 // timer is a simple countdown utility with visual feedback and audio alerts.
 // Usage: timer [options] <duration>
-// Examples: timer 30s, timer 10m, timer 1.5h, timer 1h2m3s, timer --quiet 3m, timer -q 3m
+// Examples: timer 30, timer 30s, timer 10m, timer 1.5h, timer 1h2m3s, timer --quiet 3m, timer -q 3m
 //
 // Features:
 // - Live countdown display in stderr and terminal title bar
@@ -34,7 +34,7 @@ import (
 
 const internalAlarmArg = "__timer_internal_alarm_worker"
 const (
-	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30s, timer 10m, timer 1.5h, timer --quiet 5m"
+	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30, timer 30s, timer 10m, timer 1.5h, timer --quiet 5m"
 	defaultVersion        = "dev"
 	develBuildInfoVersion = "(devel)"
 )
@@ -380,12 +380,52 @@ func shouldExpandCombinedShortFlag(arg string, knownShortFlags map[rune]struct{}
 func parseDurationToken(token string) (time.Duration, error) {
 	duration, err := time.ParseDuration(token)
 	if err != nil {
-		return 0, errInvalidDuration
+		if !isBareDecimalSecondsToken(token) {
+			return 0, errInvalidDuration
+		}
+
+		duration, err = time.ParseDuration(token + "s")
+		if err != nil {
+			return 0, errInvalidDuration
+		}
 	}
 	if duration < 0 {
 		return 0, errDurationMustBeAtLeastZero
 	}
 	return duration, nil
+}
+
+func isBareDecimalSecondsToken(token string) bool {
+	if token == "" {
+		return false
+	}
+
+	start := 0
+	if token[0] == '+' || token[0] == '-' {
+		start = 1
+	}
+	if start >= len(token) {
+		return false
+	}
+
+	hasDigit := false
+	dotCount := 0
+
+	for i := start; i < len(token); i++ {
+		switch c := token[i]; {
+		case c >= '0' && c <= '9':
+			hasDigit = true
+		case c == '.':
+			dotCount++
+			if dotCount > 1 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+
+	return hasDigit
 }
 
 // isPotentialNegativeDuration distinguishes duration-like inputs (e.g. "-1s")

@@ -144,8 +144,10 @@ For ergonomics, options may be placed before or after the duration operand (for 
 ### Examples
 ```bash
 timer 30s      # 30 seconds
+timer 30       # 30 seconds (bare numbers are seconds)
 timer 5m       # 5 minutes
 timer 1.5h     # 1.5 hours
+timer 0.5      # 500 milliseconds
 timer 90m      # 90 minutes
 timer --help   # Show help
 timer -v       # Show version (e.g. timer dev or timer vX.Y.Z)
@@ -160,7 +162,7 @@ timer -- --help # Treat --help as positional token (invalid duration)
 timer 10m > /tmp/timer.out 2> /tmp/timer.status # Keep data (stdout) and status (stderr) separate
 ```
 
-The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`.
+The timer accepts any duration format supported by Go's `time.ParseDuration`, including combinations like `1h30m` or `2h15m30s`. Bare integers and decimals (for example `30`, `0.5`, `.5`) are also accepted and treated as seconds.
 
 ### Flags
 

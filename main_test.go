@@ -336,6 +336,11 @@ func TestParseInvocation_RunModeFlagsAndDuration(t *testing.T) {
 	runParseInvocationCases(t, []parseInvocationTestCase{
 		{name: "valid duration invocation", args: cliArgs("1s"), want: invocation{mode: modeRun, duration: time.Second}},
 		{name: "zero duration invocation", args: cliArgs("0s"), want: invocation{mode: modeRun, duration: 0}},
+		{name: "bare integer duration is seconds", args: cliArgs("5"), want: invocation{mode: modeRun, duration: 5 * time.Second}},
+		{name: "bare decimal duration is seconds", args: cliArgs("0.5"), want: invocation{mode: modeRun, duration: 500 * time.Millisecond}},
+		{name: "bare leading-dot decimal duration is seconds", args: cliArgs(".5"), want: invocation{mode: modeRun, duration: 500 * time.Millisecond}},
+		{name: "bare trailing-dot decimal duration is seconds", args: cliArgs("5."), want: invocation{mode: modeRun, duration: 5 * time.Second}},
+		{name: "bare positive-signed integer duration is seconds", args: cliArgs("+5"), want: invocation{mode: modeRun, duration: 5 * time.Second}},
 		{name: "double dash allows duration token", args: cliArgs("--", "1s"), want: invocation{mode: modeRun, duration: time.Second}},
 		{name: "double dash allows negative duration validation", args: cliArgs("--", "-1s"), wantErr: errDurationMustBeAtLeastZero},
 		{name: "quiet short flag with duration", args: cliArgs("-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true}},
@@ -390,7 +395,48 @@ func TestParseInvocation_UsageAndDurationErrors(t *testing.T) {
 		{name: "double dash then combined short token remains positional invalid duration", args: cliArgs("--", "-qs"), wantErr: errInvalidDuration},
 		{name: "invalid duration format", args: cliArgs("abc"), wantErr: errInvalidDuration},
 		{name: "negative duration remains duration validation error", args: cliArgs("-1s"), wantErr: errDurationMustBeAtLeastZero},
+		{name: "bare negative integer remains duration validation error", args: cliArgs("-1"), wantErr: errDurationMustBeAtLeastZero},
+		{name: "bare negative decimal remains duration validation error", args: cliArgs("-.5"), wantErr: errDurationMustBeAtLeastZero},
+		{name: "bare exponent duration format is invalid", args: cliArgs("1e3"), wantErr: errInvalidDuration},
+		{name: "bare dot duration format is invalid", args: cliArgs("."), wantErr: errInvalidDuration},
 	})
+}
+
+func TestIsBareDecimalSecondsToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		token string
+		want  bool
+	}{
+		{name: "integer", token: "5", want: true},
+		{name: "decimal", token: "0.5", want: true},
+		{name: "leading dot", token: ".5", want: true},
+		{name: "trailing dot", token: "5.", want: true},
+		{name: "positive sign", token: "+5", want: true},
+		{name: "negative sign", token: "-1", want: true},
+		{name: "just dot", token: ".", want: false},
+		{name: "just plus", token: "+", want: false},
+		{name: "just minus", token: "-", want: false},
+		{name: "multiple dots", token: "1.2.3", want: false},
+		{name: "exponent notation", token: "1e3", want: false},
+		{name: "with unit suffix", token: "1s", want: false},
+		{name: "alphabetic", token: "abc", want: false},
+		{name: "empty", token: "", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := isBareDecimalSecondsToken(tc.token)
+			if got != tc.want {
+				t.Fatalf("isBareDecimalSecondsToken(%q) = %v, want %v", tc.token, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestAlarmCandidatesForGOOS(t *testing.T) {
