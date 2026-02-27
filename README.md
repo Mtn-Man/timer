@@ -16,26 +16,36 @@ A fast command-line countdown timer with live terminal feedback, graceful cancel
 
 ## Quick Start
 
-Prerequisite: Go 1.20+ installed. Get Go: https://go.dev/dl/
-
 Install and run in under a minute:
 
 ```bash
-go install github.com/Mtn-Man/timer@latest
-timer 10m
+brew tap Mtn-Man/tools
+brew install Mtn-Man/tools/timer
 timer --help
+timer 10m
 ```
 
-A Homebrew tap is planned; for now, `go install` is the quickest setup path.
 If `timer` is not found after install, see [Troubleshooting](#troubleshooting).
 
 ## Platform Support
 
 - Prebuilt release binaries are published for tested platforms: macOS and Linux (`amd64` and `arm64`).
 - BSD systems are expected to work when building from source, but prebuilt BSD binaries are not currently published.
-- Windows is not supported currently.
+- Windows is currently unsupported.
 
 ## Installation
+
+### Install With Homebrew (Recommended)
+
+```bash
+brew tap Mtn-Man/tools
+brew install Mtn-Man/tools/timer
+```
+
+Verify:
+```bash
+timer --version
+```
 
 ### Install Prebuilt Release Binary (Tested Platforms: macOS/Linux)
 
@@ -97,6 +107,8 @@ If `timer` is not found after install, see [Troubleshooting](#troubleshooting).
    ```
 
 ### Install With Go
+
+Prerequisite: Go 1.20+ installed. Get Go: https://go.dev/dl/
 
 Install the latest version:
 ```bash
@@ -181,8 +193,9 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 
 ## Troubleshooting
 
-- `timer` not found after install (`timer: command not found`): Ensure your install location is in `PATH` (`$(go env GOPATH)/bin` or `GOBIN` for `go install`, `/usr/local/bin` or `~/.local/bin` for manual install), then restart or reload your shell.
+- `timer` not found after install (`timer: command not found`): Ensure your install location is in `PATH` (`/opt/homebrew/bin` or `/usr/local/bin` for Homebrew, `$(go env GOPATH)/bin` or `GOBIN` for `go install`, `/usr/local/bin` or `~/.local/bin` for manual install), then restart or reload your shell.
 - `Permission denied` while installing to `/usr/local/bin`: Use `sudo install ...` or install to `~/.local/bin` instead.
+- Homebrew command ambiguity with the existing `timer` cask: use `brew install Mtn-Man/tools/timer` and `brew info Mtn-Man/tools/timer`.
 - `timer --version` shows `timer dev`: This is expected for local source builds without `-ldflags "-X main.version=vX.Y.Z"` (for example, `go build .`).
 
 ## How It Works
