@@ -218,7 +218,7 @@ So if either stream is piped or redirected, alarm does not auto-run unless expli
 
 When `--sound` is provided, alarm playback is still attempted on completion in `--quiet` and non-TTY modes.
 
-On macOS, default sleep inhibition is attempted only when both `stdout` and `stderr` are TTYs. With `--caffeinate`, the timer also attempts sleep inhibition in non-TTY/piped runs (best effort).
+On macOS, default sleep inhibition is attempted only when both `stdout` and `stderr` are TTYs. In that interactive mode, timer uses `caffeinate -i -d -w <pid>` to also keep the display awake. With `--caffeinate`, timer also attempts sleep inhibition in non-TTY/piped runs (best effort), but uses `caffeinate -i -w <pid>` (no `-d`).
 On non-macOS systems, `--caffeinate` prints a warning and continues normally without sleep inhibition.
 
 Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode, the current line is cleared and `timer cancelled` is printed, then the process exits with code 130. In non-TTY normal mode, `timer: cancelled` is emitted. In `--quiet` mode, cancellation text is suppressed.

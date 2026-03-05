@@ -449,7 +449,7 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 	var sleepInhibitor *exec.Cmd
 	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, status.interactive, forceAwake) {
 		pid := strconv.Itoa(os.Getpid())
-		sleepInhibitor = quietCmd("caffeinate", "-i", "-w", pid)
+		sleepInhibitor = quietCmd("caffeinate", sleepInhibitorArgs(sideEffectsInteractive, status.interactive, pid)...)
 		if err := sleepInhibitor.Start(); err != nil {
 			sleepInhibitor = nil
 		} else {
@@ -588,6 +588,15 @@ func shouldPrintLifecycleStart(interactive bool, quiet bool) bool {
 
 func shouldStartSleepInhibitor(goos string, stdoutInteractive bool, statusInteractive bool, forceAwake bool) bool {
 	return goos == "darwin" && ((stdoutInteractive && statusInteractive) || forceAwake)
+}
+
+func sleepInhibitorArgs(stdoutInteractive bool, statusInteractive bool, pid string) []string {
+	args := []string{"-i"}
+	if stdoutInteractive && statusInteractive {
+		args = append(args, "-d")
+	}
+	args = append(args, "-w", pid)
+	return args
 }
 
 func shouldTriggerAlarm(sideEffectsInteractive bool, quiet bool, forceAlarm bool) bool {

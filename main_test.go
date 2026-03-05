@@ -789,6 +789,52 @@ func TestShouldStartSleepInhibitor(t *testing.T) {
 	}
 }
 
+func TestSleepInhibitorArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		stdoutInteractive bool
+		statusInteractive bool
+		pid               string
+		want              []string
+	}{
+		{
+			name:              "both streams interactive includes display flag",
+			stdoutInteractive: true,
+			statusInteractive: true,
+			pid:               "123",
+			want:              []string{"-i", "-d", "-w", "123"},
+		},
+		{
+			name:              "forced non interactive omits display flag",
+			stdoutInteractive: false,
+			statusInteractive: false,
+			pid:               "123",
+			want:              []string{"-i", "-w", "123"},
+		},
+		{
+			name:              "mixed interactivity omits display flag",
+			stdoutInteractive: true,
+			statusInteractive: false,
+			pid:               "456",
+			want:              []string{"-i", "-w", "456"},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := sleepInhibitorArgs(tc.stdoutInteractive, tc.statusInteractive, tc.pid)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("sleepInhibitorArgs(%v, %v, %q) = %v, want %v", tc.stdoutInteractive, tc.statusInteractive, tc.pid, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 	t.Parallel()
 
