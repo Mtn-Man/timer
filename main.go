@@ -83,12 +83,14 @@ type invocation struct {
 	quiet      bool
 	forceAlarm bool
 	forceAwake bool
+	soundFile  string
 }
 
 type cliFlag struct {
 	short       string
 	long        string
 	description string
+	takesValue  bool
 }
 
 type statusDisplay struct {
@@ -102,6 +104,7 @@ var cliFlags = []cliFlag{
 	{short: "-v", long: "--version", description: "Show version and exit"},
 	{short: "-q", long: "--quiet", description: "TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm"},
 	{short: "-s", long: "--sound", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
+	{short: "-f", long: "--sound-file", description: "Path to a custom audio file to play on completion (implies --sound)", takesValue: true},
 	{short: "-c", long: "--caffeinate", description: "Force sleep inhibition attempt even in non-TTY mode (darwin only)"},
 }
 
@@ -129,6 +132,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, awakeUnsupportedWarning())
 	}
 
+	if inv.soundFile != "" {
+		inv.soundFile = resolveUsableSoundFilePath(inv.soundFile)
+	}
+
 	ctx, cancel := context.WithCancelCause(context.Background())
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -150,7 +157,7 @@ func main() {
 	}
 	sideEffectsInteractive := stdoutIsTTY()
 
-	if err := runTimer(ctx, inv.duration, status, sideEffectsInteractive, inv.quiet, inv.forceAlarm, inv.forceAwake); err != nil {
+	if err := runTimer(ctx, inv.duration, status, sideEffectsInteractive, inv.quiet, inv.forceAlarm, inv.forceAwake, inv.soundFile); err != nil {
 		os.Exit(exitCodeForCancelError(err))
 	}
 }
@@ -171,7 +178,7 @@ func exitCodeForCancelError(err error) int {
 // shouldRunInternalAlarm reports whether to run as an internal alarm worker.
 // Internal mode is activated only by an exact hidden sentinel argument.
 func shouldRunInternalAlarm(args []string) bool {
-	return len(args) == 2 && args[1] == internalAlarmArg
+	return (len(args) == 2 || len(args) == 3) && args[1] == internalAlarmArg
 }
 
 func renderHelpText() string {
@@ -223,6 +230,39 @@ func awakeUnsupportedWarning() string {
 	return "Warning: --caffeinate sleep inhibition is only supported on darwin; continuing without sleep inhibition"
 }
 
+func resolveSoundFilePath(path string) (string, error) {
+	switch {
+	case path == "~":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return homeDir, nil
+	case strings.HasPrefix(path, "~/"):
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return homeDir + path[1:], nil
+	default:
+		return path, nil
+	}
+}
+
+func resolveUsableSoundFilePath(path string) string {
+	resolvedPath, err := resolveSoundFilePath(path)
+	if err != nil {
+		return ""
+	}
+
+	info, err := os.Stat(resolvedPath)
+	if err != nil || info.IsDir() {
+		return ""
+	}
+
+	return resolvedPath
+}
+
 func renderInvocationError(err error) (string, int) {
 	var unknownErr unknownOptionError
 	switch {
@@ -258,7 +298,8 @@ func parseInvocation(args []string) (invocation, error) {
 	var firstUnknownOption string
 	var durationToken string
 
-	for _, arg := range args[1:] {
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
 		if !seenDoubleDash && arg == "--" {
 			seenDoubleDash = true
 			continue
@@ -277,6 +318,14 @@ func parseInvocation(args []string) (invocation, error) {
 				continue
 			case "-s", "--sound":
 				inv.forceAlarm = true
+				continue
+			case "-f", "--sound-file":
+				if i+1 >= len(args) {
+					return invocation{mode: modeRun}, errUsage
+				}
+				inv.soundFile = args[i+1]
+				inv.forceAlarm = true
+				i++ // skip path
 				continue
 			case "-c", "--caffeinate":
 				inv.forceAwake = true
@@ -323,7 +372,7 @@ func preprocessCombinedShortFlags(args []string) []string {
 		return args
 	}
 
-	knownShortFlags := knownShortFlagsSet(cliFlags)
+	shortFlags := knownShortFlagsSet(cliFlags)
 	normalized := make([]string, 0, len(args))
 	normalized = append(normalized, args[0])
 
@@ -335,11 +384,11 @@ func preprocessCombinedShortFlags(args []string) []string {
 			continue
 		}
 
-		if !seenDoubleDash && shouldExpandCombinedShortFlag(arg, knownShortFlags) {
-			for _, shortRune := range arg[1:] {
-				normalized = append(normalized, "-"+string(shortRune))
+		if !seenDoubleDash {
+			if expanded, ok := expandCombinedShortFlag(arg, shortFlags); ok {
+				normalized = append(normalized, expanded...)
+				continue
 			}
-			continue
 		}
 
 		normalized = append(normalized, arg)
@@ -348,33 +397,49 @@ func preprocessCombinedShortFlags(args []string) []string {
 	return normalized
 }
 
-func knownShortFlagsSet(flags []cliFlag) map[rune]struct{} {
-	known := make(map[rune]struct{})
+func knownShortFlagsSet(flags []cliFlag) map[rune]cliFlag {
+	known := make(map[rune]cliFlag)
 	for _, flag := range flags {
 		if len(flag.short) != 2 || flag.short[0] != '-' {
 			continue
 		}
-		known[rune(flag.short[1])] = struct{}{}
+		known[rune(flag.short[1])] = flag
 	}
 	return known
 }
 
-func shouldExpandCombinedShortFlag(arg string, knownShortFlags map[rune]struct{}) bool {
+func expandCombinedShortFlag(arg string, knownShortFlags map[rune]cliFlag) ([]string, bool) {
 	if len(arg) < 3 || arg[0] != '-' || arg[1] == '-' {
-		return false
+		return nil, false
 	}
 
 	if isPotentialNegativeDuration(arg) {
-		return false
+		return nil, false
 	}
+
+	expanded := make([]string, 0, len(arg)-1)
+	valueFlags := make([]string, 0, 1)
 
 	for _, shortRune := range arg[1:] {
-		if _, ok := knownShortFlags[shortRune]; !ok {
-			return false
+		flag, ok := knownShortFlags[shortRune]
+		if !ok {
+			return nil, false
 		}
+		if flag.takesValue {
+			valueFlags = append(valueFlags, flag.short)
+			continue
+		}
+		expanded = append(expanded, flag.short)
 	}
 
-	return true
+	if len(valueFlags) > 1 {
+		return nil, false
+	}
+	if len(valueFlags) == 1 {
+		expanded = append(expanded, valueFlags[0])
+	}
+
+	return expanded, true
 }
 
 func parseDurationToken(token string) (time.Duration, error) {
@@ -439,11 +504,11 @@ func isPotentialNegativeDuration(arg string) bool {
 	return (next >= '0' && next <= '9') || next == '.'
 }
 
-func runTimer(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool) error {
-	return runTimerWithAlarmStarter(ctx, duration, status, sideEffectsInteractive, quiet, forceAlarm, forceAwake, startAlarmProcess)
+func runTimer(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, soundFile string) error {
+	return runTimerWithAlarmStarter(ctx, duration, status, sideEffectsInteractive, quiet, forceAlarm, forceAwake, soundFile, startAlarmProcess)
 }
 
-func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, alarmStarter func()) error {
+func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, soundFile string, alarmStarter func(string)) error {
 	bothStreamsInteractive := sideEffectsInteractive && status.interactive
 
 	var sleepInhibitor *exec.Cmd
@@ -487,7 +552,7 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 			printComplete(status, quiet)
 			shouldAlarm := shouldTriggerAlarm(bothStreamsInteractive, quiet, forceAlarm)
 			if shouldAlarm {
-				alarmStarter()
+				alarmStarter(soundFile)
 			}
 			return nil
 
@@ -623,25 +688,33 @@ func isTerminal(fd uintptr) bool {
 // startAlarmProcess launches a detached child process that plays alert audio.
 // The parent does not wait so the prompt returns immediately on completion.
 // Alarm is best-effort; silently skip if we can't locate the executable.
-func startAlarmProcess() {
+func startAlarmProcess(soundFile string) {
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
 
-	cmd := newInternalAlarmCmd(exe)
+	cmd := newInternalAlarmCmd(exe, soundFile)
 	_ = cmd.Start()
 }
 
-func newInternalAlarmCmd(exe string) *exec.Cmd {
-	cmd := quietCmd(exe, internalAlarmArg)
+func newInternalAlarmCmd(exe string, soundFile string) *exec.Cmd {
+	args := []string{internalAlarmArg}
+	if soundFile != "" {
+		args = append(args, soundFile)
+	}
+	cmd := quietCmd(exe, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd
 }
 
 // runAlarmWorker plays an available alarm backend 4 times with 100ms pauses.
 func runAlarmWorker() {
-	playAlarmAttempts(resolveAlarmCommands(), 4, 100*time.Millisecond, runAlarmCommand)
+	soundFile := ""
+	if len(os.Args) == 3 {
+		soundFile = os.Args[2]
+	}
+	playAlarmAttempts(resolveAlarmCommands(soundFile), 4, 100*time.Millisecond, runAlarmCommand)
 }
 
 // playAlarmAttempts plays a sound up to attempts times, removing any backend that fails.
@@ -670,8 +743,8 @@ func playAlarmAttempts(commands []alarmCommand, attempts int, interval time.Dura
 	}
 }
 
-func resolveAlarmCommands() []alarmCommand {
-	candidates := alarmCandidatesForGOOS(runtime.GOOS)
+func resolveAlarmCommands(soundFile string) []alarmCommand {
+	candidates := alarmCandidatesForGOOS(runtime.GOOS, soundFile)
 	commands := make([]alarmCommand, 0, len(candidates))
 
 	for _, candidate := range candidates {
@@ -696,18 +769,32 @@ func quietCmd(name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-func alarmCandidatesForGOOS(goos string) []alarmCommand {
+func alarmCandidatesForGOOS(goos string, soundFile string) []alarmCommand {
 	switch goos {
 	case "darwin":
+		if soundFile != "" {
+			return []alarmCommand{{name: "afplay", args: []string{soundFile}}}
+		}
 		return []alarmCommand{
 			{name: "afplay", args: []string{"/System/Library/Sounds/Submarine.aiff"}},
 		}
 	case "linux":
+		if soundFile != "" {
+			return []alarmCommand{
+				{name: "canberra-gtk-play", args: []string{"--file", soundFile}},
+				{name: "paplay", args: []string{soundFile}},
+			}
+		}
 		return []alarmCommand{
 			{name: "canberra-gtk-play", args: []string{"-i", "bell"}},
 			{name: "timeout", args: []string{"0.15s", "speaker-test", "-t", "sine", "-f", "1200", "-c", "1", "-s", "1"}},
 		}
 	case "freebsd":
+		if soundFile != "" {
+			return []alarmCommand{
+				{name: "canberra-gtk-play", args: []string{"--file", soundFile}},
+			}
+		}
 		return []alarmCommand{
 			{name: "beep"},
 			{name: "canberra-gtk-play", args: []string{"-i", "bell"}},

@@ -28,6 +28,11 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "worker mode with sound file arg",
+			args: []string{"timer", internalAlarmArg, "path/to/sound.mp3"},
+			want: true,
+		},
+		{
 			name: "normal mode when no args",
 			args: []string{"timer"},
 			want: false,
@@ -39,7 +44,7 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 		},
 		{
 			name: "normal mode when hidden worker arg has trailing args",
-			args: []string{"timer", internalAlarmArg, "1s"},
+			args: []string{"timer", internalAlarmArg, "path/to/sound.mp3", "1s"},
 			want: false,
 		},
 	}
@@ -59,23 +64,35 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 func TestNewInternalAlarmCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := newInternalAlarmCmd("/tmp/timer-bin")
-	if len(cmd.Args) != 2 {
-		t.Fatalf("newInternalAlarmCmd() args length = %d, want 2", len(cmd.Args))
-	}
-	if cmd.Args[0] != "/tmp/timer-bin" {
-		t.Fatalf("newInternalAlarmCmd() args[0] = %q, want %q", cmd.Args[0], "/tmp/timer-bin")
-	}
-	if cmd.Args[1] != internalAlarmArg {
-		t.Fatalf("newInternalAlarmCmd() args[1] = %q, want %q", cmd.Args[1], internalAlarmArg)
-	}
+	t.Run("without sound file", func(t *testing.T) {
+		cmd := newInternalAlarmCmd("/tmp/timer-bin", "")
+		if len(cmd.Args) != 2 {
+			t.Fatalf("newInternalAlarmCmd() args length = %d, want 2", len(cmd.Args))
+		}
+		if cmd.Args[0] != "/tmp/timer-bin" {
+			t.Fatalf("newInternalAlarmCmd() args[0] = %q, want %q", cmd.Args[0], "/tmp/timer-bin")
+		}
+		if cmd.Args[1] != internalAlarmArg {
+			t.Fatalf("newInternalAlarmCmd() args[1] = %q, want %q", cmd.Args[1], internalAlarmArg)
+		}
+	})
+
+	t.Run("with sound file", func(t *testing.T) {
+		cmd := newInternalAlarmCmd("/tmp/timer-bin", "path/to/sound.mp3")
+		if len(cmd.Args) != 3 {
+			t.Fatalf("newInternalAlarmCmd() args length = %d, want 3", len(cmd.Args))
+		}
+		if cmd.Args[1] != internalAlarmArg {
+			t.Fatalf("newInternalAlarmCmd() args[1] = %q, want %q", cmd.Args[1], internalAlarmArg)
+		}
+		if cmd.Args[2] != "path/to/sound.mp3" {
+			t.Fatalf("newInternalAlarmCmd() args[2] = %q, want %q", cmd.Args[2], "path/to/sound.mp3")
+		}
+	})
+
+	cmd := newInternalAlarmCmd("/tmp/timer-bin", "")
 	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
 		t.Fatal("newInternalAlarmCmd() should set Setpgid=true")
-	}
-	for _, envVar := range cmd.Env {
-		if strings.HasPrefix(envVar, "TIMER_INTERNAL_ALARM=") {
-			t.Fatalf("newInternalAlarmCmd() should not set TIMER_INTERNAL_ALARM env, got %q", envVar)
-		}
 	}
 }
 
@@ -87,6 +104,7 @@ func TestRenderHelpText(t *testing.T) {
 		"  -v, --version    Show version and exit\n" +
 		"  -q, --quiet      TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm\n" +
 		"  -s, --sound      Force alarm playback on completion even in quiet/non-TTY mode\n" +
+		"  -f, --sound-file Path to a custom audio file to play on completion (implies --sound)\n" +
 		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)\n\n" +
 		"Note: -- ends option parsing; subsequent tokens are treated as positional arguments.\n"
 
@@ -256,6 +274,80 @@ func TestRenderInvocationError(t *testing.T) {
 	}
 }
 
+func TestResolveSoundFilePath(t *testing.T) {
+	t.Run("leaves plain path unchanged", func(t *testing.T) {
+		got, err := resolveSoundFilePath("path/to/sound.mp3")
+		if err != nil {
+			t.Fatalf("resolveSoundFilePath() error = %v, want nil", err)
+		}
+		if got != "path/to/sound.mp3" {
+			t.Fatalf("resolveSoundFilePath() = %q, want %q", got, "path/to/sound.mp3")
+		}
+	})
+
+	t.Run("expands bare home", func(t *testing.T) {
+		t.Setenv("HOME", "/tmp/test-home")
+
+		got, err := resolveSoundFilePath("~")
+		if err != nil {
+			t.Fatalf("resolveSoundFilePath() error = %v, want nil", err)
+		}
+		if got != "/tmp/test-home" {
+			t.Fatalf("resolveSoundFilePath() = %q, want %q", got, "/tmp/test-home")
+		}
+	})
+
+	t.Run("expands home relative path", func(t *testing.T) {
+		t.Setenv("HOME", "/tmp/test-home")
+
+		got, err := resolveSoundFilePath("~/Music/AudioBooks YT/book.mp3")
+		if err != nil {
+			t.Fatalf("resolveSoundFilePath() error = %v, want nil", err)
+		}
+		if got != "/tmp/test-home/Music/AudioBooks YT/book.mp3" {
+			t.Fatalf("resolveSoundFilePath() = %q, want %q", got, "/tmp/test-home/Music/AudioBooks YT/book.mp3")
+		}
+	})
+}
+
+func TestResolveUsableSoundFilePath(t *testing.T) {
+	t.Run("keeps existing file", func(t *testing.T) {
+		tempFile, err := os.CreateTemp(t.TempDir(), "sound-*.mp3")
+		if err != nil {
+			t.Fatalf("CreateTemp() error = %v", err)
+		}
+		defer func() { _ = tempFile.Close() }()
+
+		got := resolveUsableSoundFilePath(tempFile.Name())
+		if got != tempFile.Name() {
+			t.Fatalf("resolveUsableSoundFilePath() = %q, want %q", got, tempFile.Name())
+		}
+	})
+
+	t.Run("falls back when file does not exist", func(t *testing.T) {
+		got := resolveUsableSoundFilePath("/definitely/missing/sound.mp3")
+		if got != "" {
+			t.Fatalf("resolveUsableSoundFilePath() = %q, want empty string", got)
+		}
+	})
+
+	t.Run("falls back when path is a directory", func(t *testing.T) {
+		got := resolveUsableSoundFilePath(t.TempDir())
+		if got != "" {
+			t.Fatalf("resolveUsableSoundFilePath() = %q, want empty string", got)
+		}
+	})
+
+	t.Run("falls back when home-relative file does not exist", func(t *testing.T) {
+		t.Setenv("HOME", "/tmp/test-home")
+
+		got := resolveUsableSoundFilePath("~/missing.mp3")
+		if got != "" {
+			t.Fatalf("resolveUsableSoundFilePath() = %q, want empty string", got)
+		}
+	})
+}
+
 type parseInvocationTestCase struct {
 	name        string
 	args        []string
@@ -358,6 +450,15 @@ func TestParseInvocation_RunModeFlagsAndDuration(t *testing.T) {
 		{name: "awake short and quiet with duration", args: cliArgs("-c", "-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAwake: true}},
 		{name: "quiet and alarm with duration", args: cliArgs("--quiet", "--sound", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true}},
 		{name: "alarm and awake together", args: cliArgs("--sound", "--caffeinate", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true, forceAwake: true}},
+		{name: "sound file long flag", args: cliArgs("--sound-file", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
+		{name: "sound file short flag", args: cliArgs("-f", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
+		{name: "combined quiet and sound file short flags", args: cliArgs("-qf", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
+		{name: "combined sound file then quiet short flags", args: cliArgs("-fq", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
+		{name: "combined quiet sound file awake short flags", args: cliArgs("-qfc", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true, forceAwake: true, soundFile: "path/to/sound.mp3"}},
+		{name: "combined awake sound file quiet short flags", args: cliArgs("-cfq", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true, forceAwake: true, soundFile: "path/to/sound.mp3"}},
+		{name: "sound file and quiet", args: cliArgs("--quiet", "--sound-file", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
+		{name: "sound file as last arg returns usage error", args: cliArgs("1s", "--sound-file"), wantErr: errUsage},
+		{name: "short sound file as last arg returns usage error", args: cliArgs("1s", "-f"), wantErr: errUsage},
 	})
 }
 
@@ -374,6 +475,7 @@ func TestParseInvocation_UnknownOptions(t *testing.T) {
 		{name: "unknown flag takes precedence over version when unknown comes first", args: cliArgs("--wat", "--version"), wantUnknown: "--wat"},
 		{name: "first unknown option is retained", args: cliArgs("--wat", "--oops", "1s"), wantUnknown: "--wat"},
 		{name: "combined short flag with unknown member remains single unknown", args: cliArgs("-qx"), wantUnknown: "-qx"},
+		{name: "combined short flag with repeated sound file returns usage", args: cliArgs("-ff", "path/to/sound.mp3", "1s"), wantErr: errUsage},
 		{name: "double dash then unknown-looking token is positional invalid duration", args: cliArgs("--", "--wat"), wantErr: errInvalidDuration},
 		{name: "double dash positional unknown then extra positional is usage", args: cliArgs("--", "--wat", "--oops"), wantErr: errUsage},
 	})
@@ -459,7 +561,7 @@ func TestAlarmCandidatesForGOOS(t *testing.T) {
 		t.Run(tc.goos, func(t *testing.T) {
 			t.Parallel()
 
-			got := alarmCandidatesForGOOS(tc.goos)
+			got := alarmCandidatesForGOOS(tc.goos, "")
 			if len(got) != tc.wantCount {
 				t.Fatalf("alarmCandidatesForGOOS(%q) count = %d, want %d", tc.goos, len(got), tc.wantCount)
 			}
@@ -473,10 +575,55 @@ func TestAlarmCandidatesForGOOS(t *testing.T) {
 func TestAlarmCandidatesForUnknownGOOS(t *testing.T) {
 	t.Parallel()
 
-	got := alarmCandidatesForGOOS("unknown-os")
+	got := alarmCandidatesForGOOS("unknown-os", "")
 	if got != nil {
 		t.Fatalf("alarmCandidatesForGOOS() = %v, want nil", got)
 	}
+}
+
+func TestAlarmCandidatesWithSoundFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("darwin custom sound", func(t *testing.T) {
+		got := alarmCandidatesForGOOS("darwin", "custom.mp3")
+		if len(got) != 1 || got[0].name != "afplay" || got[0].args[0] != "custom.mp3" {
+			t.Fatalf("alarmCandidatesForGOOS(darwin, custom.mp3) = %v", got)
+		}
+	})
+
+	t.Run("linux custom sound", func(t *testing.T) {
+		got := alarmCandidatesForGOOS("linux", "custom.mp3")
+		if len(got) != 2 {
+			t.Fatalf("alarmCandidatesForGOOS(linux, custom.mp3) length = %d, want 2", len(got))
+		}
+		if got[0].name != "canberra-gtk-play" || got[0].args[1] != "custom.mp3" {
+			t.Fatalf("alarmCandidatesForGOOS(linux, custom.mp3) first = %v", got[0])
+		}
+		if got[1].name != "paplay" || got[1].args[0] != "custom.mp3" {
+			t.Fatalf("alarmCandidatesForGOOS(linux, custom.mp3) second = %v", got[1])
+		}
+	})
+
+	t.Run("freebsd custom sound", func(t *testing.T) {
+		got := alarmCandidatesForGOOS("freebsd", "custom.mp3")
+		if len(got) != 1 || got[0].name != "canberra-gtk-play" || got[0].args[1] != "custom.mp3" {
+			t.Fatalf("alarmCandidatesForGOOS(freebsd, custom.mp3) = %v", got)
+		}
+	})
+
+	t.Run("openbsd custom sound falls back to beep", func(t *testing.T) {
+		got := alarmCandidatesForGOOS("openbsd", "custom.mp3")
+		if len(got) != 1 || got[0].name != "beep" {
+			t.Fatalf("alarmCandidatesForGOOS(openbsd, custom.mp3) = %v", got)
+		}
+	})
+
+	t.Run("netbsd custom sound falls back to beep", func(t *testing.T) {
+		got := alarmCandidatesForGOOS("netbsd", "custom.mp3")
+		if len(got) != 1 || got[0].name != "beep" {
+			t.Fatalf("alarmCandidatesForGOOS(netbsd, custom.mp3) = %v", got)
+		}
+	})
 }
 
 func TestIsTerminal_NonTTYDescriptors(t *testing.T) {
@@ -558,7 +705,7 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 		interactive:      false,
 		supportsAdvanced: false,
 	}
-	err := runTimer(ctx, time.Hour, status, false, false, false, false)
+	err := runTimer(ctx, time.Hour, status, false, false, false, false, "")
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
@@ -587,7 +734,7 @@ func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 
 	status := newStatusDisplay(io.Discard, false, false)
 
-	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, true, false, func() {
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, true, false, "", func(string) {
 		alarmCalls++
 	})
 	if err != nil {
@@ -635,7 +782,7 @@ func TestRunTimerWithAlarmStarter_DefaultAlarmRequiresBothStreamsTTY(t *testing.
 			alarmCalls := 0
 			status := newStatusDisplay(io.Discard, tc.statusInteractive, false)
 
-			err := runTimerWithAlarmStarter(ctx, 0, status, tc.sideEffectsInteractive, false, false, false, func() {
+			err := runTimerWithAlarmStarter(ctx, 0, status, tc.sideEffectsInteractive, false, false, false, "", func(string) {
 				alarmCalls++
 			})
 			if err != nil {
@@ -841,7 +988,7 @@ func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 	ctx := context.Background()
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, func() {})
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -858,7 +1005,7 @@ func TestRunTimerWithAlarmStarter_NonTTYQuietSuppressesLifecycle(t *testing.T) {
 	ctx := context.Background()
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, func() {})
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -875,7 +1022,7 @@ func TestRunTimerWithAlarmStarter_NonTTYCancelLifecycleOutput(t *testing.T) {
 
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, 10*time.Second, status, false, false, false, false, func() {})
+	err := runTimerWithAlarmStarter(ctx, 10*time.Second, status, false, false, false, false, "", func(string) {})
 	if err == nil {
 		t.Fatal("runTimerWithAlarmStarter() error = nil, want cancellation cause")
 	}
@@ -892,7 +1039,7 @@ func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) 
 	ctx := context.Background()
 	out, status := newCapturedStatus(true, false)
 
-	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, func() {})
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -907,7 +1054,7 @@ func TestRunTimerWithAlarmStarter_InteractiveQuietClearsStatusLine(t *testing.T)
 	ctx := context.Background()
 	out, status := newCapturedStatus(true, true)
 
-	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, func() {})
+	err := runTimerWithAlarmStarter(ctx, 0, status, false, true, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}

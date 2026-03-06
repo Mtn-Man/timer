@@ -144,6 +144,8 @@ timer --help
 timer --version
 timer --quiet <duration>
 timer --sound <duration>
+timer --sound-file <path> <duration>
+timer -f <path> <duration>
 timer -s <duration>
 timer --caffeinate <duration>
 timer -c <duration>
@@ -167,6 +169,10 @@ timer -q 5m    # Quiet mode: inline countdown only
 timer -s 5m    # Force alarm playback even in quiet/non-TTY mode
 timer -qs 5m   # Combined short flags: quiet + force alarm
 timer --sound 5m # Force alarm playback even in quiet/non-TTY mode
+timer --sound-file ~/Sounds/bell.mp3 5m # Play custom sound on completion
+timer -f ~/Sounds/bell.mp3 5m          # Play custom sound on completion (short flag)
+timer -f /System/Library/Sounds/Funk.aiff 5  # macOS example: play a built-in alert sound
+timer -f "~/Music/AudioBooks YT/The Gift of the Magi.mp3" 5m # Quoted path with spaces
 timer -c 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
 timer --caffeinate 10m > /tmp/timer.log # Force macOS sleep inhibition attempt in non-TTY mode
 timer -- 10s   # End option parsing; treat following token as positional duration
@@ -182,6 +188,7 @@ The timer accepts any duration format supported by Go's `time.ParseDuration`, in
 - `-v`, `--version`: Show version and exit (reports injected build version, module version when available, or `timer dev` for local non-injected builds)
 - `-q`, `--quiet`: TTY: inline countdown only (no title updates, completion line, alarm, or cancel text). Non-TTY: suppress lifecycle status output.
 - `-s`, `--sound`: Force alarm playback on completion even in `--quiet` or non-TTY mode
+- `-f`, `--sound-file <path>`: Path to a custom audio file to play on completion (implies `--sound`; custom file playback is currently supported on macOS, Linux, and FreeBSD. If the file cannot be resolved or used, the timer falls back to the default alarm backend. OpenBSD/NetBSD always use the default alarm backend for now.)
 - `-c`, `--caffeinate`: Force sleep-inhibition attempt even in non-TTY mode (macOS only)
 - `--`: End option parsing; all following tokens are treated as positional arguments
 
