@@ -245,6 +245,12 @@ func TestRenderInvocationError(t *testing.T) {
 			wantExitCode: 2,
 		},
 		{
+			name:         "invalid time keeps prior message",
+			err:          errInvalidTime,
+			wantMessage:  "Error: invalid time format",
+			wantExitCode: 2,
+		},
+		{
 			name:         "negative duration keeps prior message",
 			err:          errDurationMustBeAtLeastZero,
 			wantMessage:  "Error: duration must be >= 0",
@@ -349,11 +355,12 @@ func TestResolveUsableSoundFilePath(t *testing.T) {
 }
 
 type parseInvocationTestCase struct {
-	name        string
-	args        []string
-	want        invocation
-	wantUnknown string
-	wantErr     error
+	name              string
+	args              []string
+	want              invocation
+	wantUnknown       string
+	wantErr           error
+	skipDurationCheck bool
 }
 
 func cliArgs(parts ...string) []string {
@@ -385,6 +392,9 @@ func runParseInvocationCases(t *testing.T, tests []parseInvocationTestCase) {
 			default:
 				if err != nil {
 					t.Fatalf("parseInvocation() unexpected error = %v", err)
+				}
+				if tc.skipDurationCheck {
+					got.duration = tc.want.duration
 				}
 				if got != tc.want {
 					t.Fatalf("parseInvocation() = %+v, want %+v", got, tc.want)
@@ -459,6 +469,10 @@ func TestParseInvocation_RunModeFlagsAndDuration(t *testing.T) {
 		{name: "sound file and quiet", args: cliArgs("--quiet", "--sound-file", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
 		{name: "sound file as last arg returns usage error", args: cliArgs("1s", "--sound-file"), wantErr: errUsage},
 		{name: "short sound file as last arg returns usage error", args: cliArgs("1s", "-f"), wantErr: errUsage},
+		{name: "space-separated AM/PM token is consumed as part of time arg", args: cliArgs("3:00", "pm"), wantErr: nil, want: invocation{mode: modeRun}, skipDurationCheck: true},
+		{name: "space-separated AM/PM with leading flag still parses", args: cliArgs("-q", "3:00", "pm"), wantErr: nil, want: invocation{mode: modeRun, quiet: true}, skipDurationCheck: true},
+		{name: "space-separated AM/PM with trailing flag still parses", args: cliArgs("3:00", "pm", "-q"), wantErr: nil, want: invocation{mode: modeRun, quiet: true}, skipDurationCheck: true},
+		{name: "invalid time with space-separated AM/PM returns invalid time error", args: cliArgs("13:00", "pm"), wantErr: errInvalidTime},
 	})
 }
 
@@ -501,6 +515,8 @@ func TestParseInvocation_UsageAndDurationErrors(t *testing.T) {
 		{name: "bare negative decimal remains duration validation error", args: cliArgs("-.5"), wantErr: errDurationMustBeAtLeastZero},
 		{name: "bare exponent duration format is invalid", args: cliArgs("1e3"), wantErr: errInvalidDuration},
 		{name: "bare dot duration format is invalid", args: cliArgs("."), wantErr: errInvalidDuration},
+		{name: "invalid wall clock time format returns invalid time error", args: cliArgs("25:99"), wantErr: errInvalidTime},
+		{name: "invalid wall clock seconds field returns invalid time error", args: cliArgs("12:00:99"), wantErr: errInvalidTime},
 	})
 }
 
@@ -536,6 +552,399 @@ func TestIsBareDecimalSecondsToken(t *testing.T) {
 			got := isBareDecimalSecondsToken(tc.token)
 			if got != tc.want {
 				t.Fatalf("isBareDecimalSecondsToken(%q) = %v, want %v", tc.token, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseWallClockTime(t *testing.T) {
+	t.Parallel()
+
+	// A fixed reference point: Tuesday 2024-03-05 at 14:30:00 local time.
+	// Using a fixed now makes all expected durations deterministic.
+	loc := time.Local
+	now := time.Date(2024, 3, 5, 14, 30, 0, 0, loc)
+
+	tests := []struct {
+		name    string
+		token   string
+		wantOk  bool
+		wantErr error
+		wantDur time.Duration // only checked when wantOk && wantErr == nil
+	}{
+		// --- format recognition ---
+		{
+			name:   "token without colon is not a wall clock token",
+			token:  "30s",
+			wantOk: false,
+		},
+		{
+			name:   "bare integer token is not a wall clock token",
+			token:  "30",
+			wantOk: false,
+		},
+
+		// --- HH:MM valid, future same day ---
+		{
+			name:    "future time same day HH:MM",
+			token:   "15:00",
+			wantOk:  true,
+			wantDur: 30 * time.Minute,
+		},
+		{
+			name:    "single digit hour H:MM",
+			token:   "9:00",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute, // wraps to next day 09:00
+		},
+		{
+			name:    "zero-padded single digit hour 09:MM",
+			token:   "09:00",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute, // same as 9:00
+		},
+		{
+			name:    "midnight 00:00 wraps to next day",
+			token:   "00:00",
+			wantOk:  true,
+			wantDur: 9*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "end of day 23:59 same day",
+			token:   "23:59",
+			wantOk:  true,
+			wantDur: 9*time.Hour + 29*time.Minute,
+		},
+
+		// --- HH:MM:SS valid ---
+		{
+			name:    "future time same day HH:MM:SS",
+			token:   "15:00:30",
+			wantOk:  true,
+			wantDur: 30*time.Minute + 30*time.Second,
+		},
+		{
+			name:    "single digit hour with seconds H:MM:SS",
+			token:   "9:00:00",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "HH:MM:SS zero seconds same as HH:MM",
+			token:   "15:00:00",
+			wantOk:  true,
+			wantDur: 30 * time.Minute,
+		},
+
+		// --- 24:00 normalization ---
+		{
+			name:    "24:00 normalizes to 00:00 and wraps to tomorrow",
+			token:   "24:00",
+			wantOk:  true,
+			wantDur: 9*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "24:00:00 normalizes to 00:00:00 and wraps to tomorrow",
+			token:   "24:00:00",
+			wantOk:  true,
+			wantDur: 9*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "24:01 is rejected as invalid",
+			token:   "24:01",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "24:00:01 is rejected as invalid",
+			token:   "24:00:01",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+
+		// --- wrap-to-tomorrow cases ---
+		{
+			name:    "past time same day wraps to next day",
+			token:   "13:00",
+			wantOk:  true,
+			wantDur: 22*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "exact match on now wraps to next day",
+			token:   "14:30",
+			wantOk:  true,
+			wantDur: 24 * time.Hour,
+		},
+		{
+			name:    "one second in the past wraps to next day",
+			token:   "14:29:59",
+			wantOk:  true,
+			wantDur: 23*time.Hour + 59*time.Minute + 59*time.Second,
+		},
+
+		// --- invalid field values ---
+		{
+			name:    "hour out of range returns invalid time error",
+			token:   "25:00",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "minute out of range returns invalid time error",
+			token:   "12:60",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "second out of range returns invalid time error",
+			token:   "12:00:60",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "negative hour returns invalid time error",
+			token:   "-1:00",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "non-numeric hour returns invalid time error",
+			token:   "ab:00",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "non-numeric minute returns invalid time error",
+			token:   "12:xx",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "non-numeric second returns invalid time error",
+			token:   "12:00:xx",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "empty hour field returns invalid time error",
+			token:   ":00",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "empty minute field returns invalid time error",
+			token:   "12:",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "empty second field returns invalid time error",
+			token:   "12:00:",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "too many colon-separated fields returns invalid time error",
+			token:   "12:00:00:00",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+
+		// --- AM/PM: bare hour shorthand ---
+		{
+			name:    "bare hour with am suffix",
+			token:   "9am",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute, // 09:00 next day (now is 14:30)
+		},
+		{
+			name:    "bare hour with pm suffix future same day",
+			token:   "3pm",
+			wantOk:  true,
+			wantDur: 30 * time.Minute, // 15:00 same day
+		},
+		{
+			name:    "bare hour with pm suffix past wraps to next day",
+			token:   "1pm",
+			wantOk:  true,
+			wantDur: 22*time.Hour + 30*time.Minute, // 13:00 next day
+		},
+
+		// --- AM/PM: case variants ---
+		{
+			name:    "uppercase AM suffix",
+			token:   "9AM",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "uppercase PM suffix",
+			token:   "3PM",
+			wantOk:  true,
+			wantDur: 30 * time.Minute,
+		},
+		{
+			name:    "mixed case Am suffix",
+			token:   "9Am",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute,
+		},
+
+		// --- AM/PM: with minutes ---
+		{
+			name:    "HH:MM with pm suffix future",
+			token:   "3:30pm",
+			wantOk:  true,
+			wantDur: time.Hour, // 15:30 same day
+		},
+		{
+			name:    "HH:MM with am suffix wraps to next day",
+			token:   "9:00am",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "HH:MM with space-separated pm",
+			token:   "3:30 pm",
+			wantOk:  true,
+			wantDur: time.Hour,
+		},
+		{
+			name:    "HH:MM with space-separated AM uppercase",
+			token:   "9:00 AM",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute,
+		},
+
+		// --- AM/PM: with seconds ---
+		{
+			name:    "HH:MM:SS with pm suffix",
+			token:   "3:30:30pm",
+			wantOk:  true,
+			wantDur: time.Hour + 30*time.Second,
+		},
+		{
+			name:    "HH:MM:SS with space-separated am",
+			token:   "9:00:00 am",
+			wantOk:  true,
+			wantDur: 18*time.Hour + 30*time.Minute,
+		},
+
+		// --- AM/PM: noon and midnight ---
+		{
+			name:    "12pm is noon",
+			token:   "12pm",
+			wantOk:  true,
+			wantDur: 21*time.Hour + 30*time.Minute, // 12:00 next day (now is 14:30)
+		},
+		{
+			name:    "12:00 PM is noon",
+			token:   "12:00 PM",
+			wantOk:  true,
+			wantDur: 21*time.Hour + 30*time.Minute,
+		},
+		{
+			name:    "12am is midnight",
+			token:   "12am",
+			wantOk:  true,
+			wantDur: 9*time.Hour + 30*time.Minute, // 00:00 next day
+		},
+		{
+			name:    "12:00 AM is midnight",
+			token:   "12:00 AM",
+			wantOk:  true,
+			wantDur: 9*time.Hour + 30*time.Minute,
+		},
+
+		// --- AM/PM: invalid values ---
+		{
+			name:    "0am is rejected",
+			token:   "0am",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "13pm is rejected",
+			token:   "13pm",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+		{
+			name:    "invalid minute with pm suffix is rejected",
+			token:   "3:60pm",
+			wantOk:  true,
+			wantErr: errInvalidTime,
+		},
+
+		// --- bare integer without suffix still falls through ---
+		{
+			name:   "bare integer without suffix is not a wall clock token",
+			token:  "9",
+			wantOk: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotDur, gotOk, gotErr := parseWallClockTime(tc.token, now)
+
+			if gotOk != tc.wantOk {
+				t.Fatalf("parseWallClockTime(%q) ok = %v, want %v", tc.token, gotOk, tc.wantOk)
+			}
+			if !errors.Is(gotErr, tc.wantErr) {
+				t.Fatalf("parseWallClockTime(%q) err = %v, want %v", tc.token, gotErr, tc.wantErr)
+			}
+			if tc.wantOk && tc.wantErr == nil {
+				// Compute expected duration relative to the same now used in the call,
+				// matching the target.Sub(now) contract of the function.
+				wantTarget := now.Add(tc.wantDur)
+				gotTarget := now.Add(gotDur)
+				if !gotTarget.Equal(wantTarget) {
+					t.Fatalf("parseWallClockTime(%q) resolves to %v, want %v (diff %v)",
+						tc.token, gotTarget, wantTarget, gotTarget.Sub(wantTarget))
+				}
+			}
+		})
+	}
+}
+
+func TestParseTimeField(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		min     int
+		max     int
+		wantVal int
+		wantOk  bool
+	}{
+		{name: "valid value in range", input: "30", min: 0, max: 59, wantVal: 30, wantOk: true},
+		{name: "minimum boundary", input: "0", min: 0, max: 23, wantVal: 0, wantOk: true},
+		{name: "maximum boundary", input: "23", min: 0, max: 23, wantVal: 23, wantOk: true},
+		{name: "zero-padded value is valid", input: "09", min: 0, max: 59, wantVal: 9, wantOk: true},
+		{name: "value below minimum is rejected", input: "0", min: 1, max: 59, wantOk: false},
+		{name: "value above maximum is rejected", input: "60", min: 0, max: 59, wantOk: false},
+		{name: "non-numeric input is rejected", input: "ab", min: 0, max: 59, wantOk: false},
+		{name: "empty string is rejected", input: "", min: 0, max: 59, wantOk: false},
+		{name: "negative value string is rejected", input: "-1", min: 0, max: 59, wantOk: false},
+		{name: "float value string is rejected", input: "1.5", min: 0, max: 59, wantOk: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotVal, gotOk := parseTimeField(tc.input, tc.min, tc.max)
+			if gotOk != tc.wantOk {
+				t.Fatalf("parseTimeField(%q, %d, %d) ok = %v, want %v", tc.input, tc.min, tc.max, gotOk, tc.wantOk)
+			}
+			if gotOk && gotVal != tc.wantVal {
+				t.Fatalf("parseTimeField(%q, %d, %d) val = %d, want %d", tc.input, tc.min, tc.max, gotVal, tc.wantVal)
 			}
 		})
 	}
@@ -1145,5 +1554,137 @@ func TestPlayAlarmAttempts_RemovesFailingBackendsAndFallsBack(t *testing.T) {
 	}
 	if !reflect.DeepEqual(calls, wantCalls) {
 		t.Fatalf("playAlarmAttempts() calls = %v, want %v", calls, wantCalls)
+	}
+}
+
+func TestStripAMPM(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		token     string
+		wantStrip string
+		wantIsPM  bool
+		wantFound bool
+	}{
+		// --- no suffix ---
+		{name: "no suffix returns token unchanged", token: "9:00", wantStrip: "9:00", wantIsPM: false, wantFound: false},
+		{name: "bare integer no suffix falls through", token: "9", wantStrip: "9", wantIsPM: false, wantFound: false},
+
+		// --- attached AM ---
+		{name: "lowercase am attached", token: "9am", wantStrip: "9", wantIsPM: false, wantFound: true},
+		{name: "uppercase AM attached", token: "9AM", wantStrip: "9", wantIsPM: false, wantFound: true},
+		{name: "mixed case Am attached", token: "9Am", wantStrip: "9", wantIsPM: false, wantFound: true},
+		{name: "HH:MM with attached am", token: "9:00am", wantStrip: "9:00", wantIsPM: false, wantFound: true},
+		{name: "HH:MM:SS with attached am", token: "9:00:00am", wantStrip: "9:00:00", wantIsPM: false, wantFound: true},
+
+		// --- attached PM ---
+		{name: "lowercase pm attached", token: "1pm", wantStrip: "1", wantIsPM: true, wantFound: true},
+		{name: "uppercase PM attached", token: "1PM", wantStrip: "1", wantIsPM: true, wantFound: true},
+		{name: "HH:MM with attached pm", token: "1:30pm", wantStrip: "1:30", wantIsPM: true, wantFound: true},
+		{name: "HH:MM:SS with attached pm", token: "1:30:00pm", wantStrip: "1:30:00", wantIsPM: true, wantFound: true},
+
+		// --- space-separated AM ---
+		{name: "space separated am", token: "9 am", wantStrip: "9", wantIsPM: false, wantFound: true},
+		{name: "space separated AM uppercase", token: "9 AM", wantStrip: "9", wantIsPM: false, wantFound: true},
+		{name: "HH:MM with space separated am", token: "9:00 am", wantStrip: "9:00", wantIsPM: false, wantFound: true},
+
+		// --- space-separated PM ---
+		{name: "space separated pm", token: "1 pm", wantStrip: "1", wantIsPM: true, wantFound: true},
+		{name: "space separated PM uppercase", token: "1 PM", wantStrip: "1", wantIsPM: true, wantFound: true},
+		{name: "HH:MM with space separated pm", token: "1:30 pm", wantStrip: "1:30", wantIsPM: true, wantFound: true},
+		{name: "HH:MM:SS with space separated pm", token: "1:30:00 pm", wantStrip: "1:30:00", wantIsPM: true, wantFound: true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotStrip, gotIsPM, gotFound := stripAMPM(tc.token)
+			if gotFound != tc.wantFound {
+				t.Fatalf("stripAMPM(%q) found = %v, want %v", tc.token, gotFound, tc.wantFound)
+			}
+			if gotStrip != tc.wantStrip {
+				t.Fatalf("stripAMPM(%q) stripped = %q, want %q", tc.token, gotStrip, tc.wantStrip)
+			}
+			if tc.wantFound && gotIsPM != tc.wantIsPM {
+				t.Fatalf("stripAMPM(%q) isPM = %v, want %v", tc.token, gotIsPM, tc.wantIsPM)
+			}
+		})
+	}
+}
+
+func TestApplyAMPM(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		hour     int
+		isPM     bool
+		wantHour int
+		wantOk   bool
+	}{
+		// --- AM conversions ---
+		{name: "1am", hour: 1, isPM: false, wantHour: 1, wantOk: true},
+		{name: "11am", hour: 11, isPM: false, wantHour: 11, wantOk: true},
+		{name: "12am is midnight", hour: 12, isPM: false, wantHour: 0, wantOk: true},
+
+		// --- PM conversions ---
+		{name: "12pm is noon", hour: 12, isPM: true, wantHour: 12, wantOk: true},
+		{name: "1pm", hour: 1, isPM: true, wantHour: 13, wantOk: true},
+		{name: "11pm", hour: 11, isPM: true, wantHour: 23, wantOk: true},
+
+		// --- out of range ---
+		{name: "0am is rejected", hour: 0, isPM: false, wantOk: false},
+		{name: "13pm is rejected", hour: 13, isPM: true, wantOk: false},
+		{name: "negative hour is rejected", hour: -1, isPM: false, wantOk: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotHour, gotOk := applyAMPM(tc.hour, tc.isPM)
+			if gotOk != tc.wantOk {
+				t.Fatalf("applyAMPM(%d, %v) ok = %v, want %v", tc.hour, tc.isPM, gotOk, tc.wantOk)
+			}
+			if gotOk && gotHour != tc.wantHour {
+				t.Fatalf("applyAMPM(%d, %v) hour = %d, want %d", tc.hour, tc.isPM, gotHour, tc.wantHour)
+			}
+		})
+	}
+}
+
+func TestIsAMPMToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		token string
+		want  bool
+	}{
+		{token: "am", want: true},
+		{token: "pm", want: true},
+		{token: "AM", want: true},
+		{token: "PM", want: true},
+		{token: "Am", want: true},
+		{token: "Pm", want: true},
+		{token: "9am", want: false},
+		{token: "9:00", want: false},
+		{token: "-q", want: false},
+		{token: "", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.token, func(t *testing.T) {
+			t.Parallel()
+
+			got := isAMPMToken(tc.token)
+			if got != tc.want {
+				t.Fatalf("isAMPMToken(%q) = %v, want %v", tc.token, got, tc.want)
+			}
+		})
 	}
 }

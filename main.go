@@ -3,14 +3,18 @@
 package main
 
 // timer is a simple countdown utility with visual feedback and audio alerts.
-// Usage: timer [options] <duration>
+// Usage: timer [options] <duration|time>
 // Examples: timer 30, timer 30s, timer 10m, timer 1.5h, timer 1h2m3s, timer --quiet 3m, timer -q 3m
+//           timer 14:30, timer 9:00, timer 23:59:00
+//           timer 9am, timer 9:30pm, timer 12:00 AM, timer 9 PM
 //
 // Features:
 // - Live countdown display in stderr and terminal title bar
 // - Graceful cancellation via Ctrl+C
 // - Audio alert on completion (best-effort, platform-specific backend)
 // - Ceiling-based display (never shows 00:00:00 while time remains)
+// - Wall clock target mode: counts down to a 24-hour time (e.g. 14:30) or 12-hour time with AM/PM
+//   (e.g. 9am, 2:30 PM); always wraps to the next day if the time has already passed
 // - Prevent sleep on macOS while timer is active (when both streams are interactive by default, or forced with --caffeinate)
 // - Non-TTY-safe lifecycle logging (started/complete/cancelled) in stderr
 
@@ -34,7 +38,7 @@ import (
 
 const internalAlarmArg = "__timer_internal_alarm_worker"
 const (
-	usageText             = "Usage: timer [options] <duration>\nExamples: timer 30, timer 30s, timer 10m, timer 1.5h, timer --quiet 5m"
+	usageText             = "Usage: timer [options] <duration|time>\nExamples: timer 30, timer 30s, timer 10m, timer 1.5h, timer --quiet 5m, timer 14:30, timer 9am, timer 2:30 PM"
 	defaultVersion        = "dev"
 	develBuildInfoVersion = "(devel)"
 )
@@ -42,6 +46,7 @@ const (
 var (
 	errUsage                     = errors.New("usage")
 	errInvalidDuration           = errors.New("invalid duration format")
+	errInvalidTime               = errors.New("invalid time format")
 	errDurationMustBeAtLeastZero = errors.New("duration must be >= 0")
 	// version is overridden in release builds via:
 	// go build -ldflags "-X main.version=vX.Y.Z"
@@ -272,6 +277,8 @@ func renderInvocationError(err error) (string, int) {
 		return usageText + "\n", 2
 	case errors.Is(err, errInvalidDuration):
 		return "Error: invalid duration format", 2
+	case errors.Is(err, errInvalidTime):
+		return "Error: invalid time format", 2
 	case errors.Is(err, errDurationMustBeAtLeastZero):
 		return "Error: duration must be >= 0", 2
 	default:
@@ -344,6 +351,10 @@ func parseInvocation(args []string) (invocation, error) {
 			return invocation{mode: modeRun}, errUsage
 		}
 		durationToken = arg
+		if i+1 < len(args) && isAMPMToken(args[i+1]) {
+			i++
+			durationToken = arg + " " + args[i]
+		}
 	}
 
 	if firstUnknownOption != "" {
@@ -443,6 +454,10 @@ func expandCombinedShortFlag(arg string, knownShortFlags map[rune]cliFlag) ([]st
 }
 
 func parseDurationToken(token string) (time.Duration, error) {
+	if d, ok, err := parseWallClockTime(token, time.Now()); ok {
+		return d, err
+	}
+
 	duration, err := time.ParseDuration(token)
 	if err != nil {
 		if !isBareDecimalSecondsToken(token) {
@@ -458,6 +473,144 @@ func parseDurationToken(token string) (time.Duration, error) {
 		return 0, errDurationMustBeAtLeastZero
 	}
 	return duration, nil
+}
+
+// parseWallClockTime parses wall clock time tokens and returns the duration from
+// now until the next occurrence of that time (target.Sub(now)).
+//
+// Accepted formats:
+//   - 24-hour: H:MM, HH:MM, H:MM:SS, HH:MM:SS (hours [0,23], minutes/seconds [0,59])
+//   - 12-hour: the above with a trailing AM/PM suffix, case-insensitive, optionally
+//     space-separated (e.g. "9am", "9:30 PM", "12:00:00AM")
+//   - Bare hour shorthand with AM/PM suffix only (e.g. "9am", "9 pm")
+//   - Special case: 24:00 and 24:00:00 are accepted and normalized to 00:00(:00)
+//
+// 12-hour clock conventions: 12:00 AM is midnight (00:00), 12:00 PM is noon (12:00).
+// Valid 12-hour hours are [1,12]; 0am and 13pm are rejected.
+//
+// If the resolved time is not strictly after now (already passed or exact match),
+// it wraps to the same time the following day using date arithmetic, which is DST-safe.
+//
+// The boolean return indicates whether the token claimed to be a wall clock time at all.
+// false means no colon and no AM/PM suffix were present; the caller should try other formats.
+// A token that looks like a time but fails validation returns true with errInvalidTime.
+func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error) {
+	stripped, isPM, hasSuffix := stripAMPM(token)
+
+	hasColon := strings.ContainsRune(stripped, ':')
+	if !hasSuffix && !hasColon {
+		return 0, false, nil
+	}
+
+	if stripped == "24:00" || stripped == "24:00:00" {
+		stripped = strings.Replace(stripped, "24", "00", 1)
+	}
+
+	var parts []string
+	if hasColon {
+		parts = strings.Split(stripped, ":")
+		if len(parts) < 2 || len(parts) > 3 {
+			return 0, true, errInvalidTime
+		}
+	} else {
+		parts = []string{stripped}
+	}
+
+	hourRange := [2]int{0, 23}
+	if hasSuffix {
+		hourRange = [2]int{1, 12}
+	}
+
+	hour, ok := parseTimeField(parts[0], hourRange[0], hourRange[1])
+	if !ok {
+		return 0, true, errInvalidTime
+	}
+
+	min := 0
+	sec := 0
+
+	if len(parts) >= 2 {
+		min, ok = parseTimeField(parts[1], 0, 59)
+		if !ok {
+			return 0, true, errInvalidTime
+		}
+	}
+	if len(parts) == 3 {
+		sec, ok = parseTimeField(parts[2], 0, 59)
+		if !ok {
+			return 0, true, errInvalidTime
+		}
+	}
+
+	if hasSuffix {
+		hour, ok = applyAMPM(hour, isPM)
+		if !ok {
+			return 0, true, errInvalidTime
+		}
+	}
+
+	target := time.Date(now.Year(), now.Month(), now.Day(), hour, min, sec, 0, now.Location())
+	if !target.After(now) {
+		target = time.Date(target.Year(), target.Month(), target.Day()+1, target.Hour(), target.Minute(), target.Second(), 0, target.Location())
+	}
+
+	return target.Sub(now), true, nil
+}
+
+// stripAMPM removes a trailing AM or PM suffix from token, case-insensitively.
+// The suffix may be directly attached ("9am") or preceded by a single space ("9 am").
+// Returns the stripped token, whether the suffix was PM, and whether any suffix was found.
+// The space-prefixed suffixes are checked first to ensure "9 am" strips " am" in full
+// rather than just "am", which would leave a trailing space in the result.
+func stripAMPM(token string) (string, bool, bool) {
+	lower := strings.ToLower(token)
+	for _, suffix := range []string{" am", " pm", "am", "pm"} {
+		if strings.HasSuffix(lower, suffix) {
+			isPM := strings.HasSuffix(lower, "pm")
+			return strings.TrimSuffix(token, token[len(token)-len(suffix):]), isPM, true
+		}
+	}
+	return token, false, false
+}
+
+// applyAMPM converts a 12-hour clock hour to a 24-hour clock hour.
+// Valid input hours are [1, 12]. Returns false if the hour is out of that range.
+// 12 AM maps to 0 (midnight); 12 PM maps to 12 (noon); all others follow standard convention.
+func applyAMPM(hour int, isPM bool) (int, bool) {
+	if hour < 1 || hour > 12 {
+		return 0, false
+	}
+	if isPM {
+		if hour == 12 {
+			return 12, true
+		}
+		return hour + 12, true
+	}
+	if hour == 12 {
+		return 0, true
+	}
+	return hour, true
+}
+
+// isAMPMToken reports whether s is exactly "am" or "pm", case-insensitively.
+// Used by parseInvocation to detect a space-separated AM/PM token following a time argument.
+func isAMPMToken(s string) bool {
+	lower := strings.ToLower(s)
+	return lower == "am" || lower == "pm"
+}
+
+// parseTimeField parses a numeric string and checks it falls within [min, max].
+// Leading zeros are accepted (e.g. "09" parses as 9). Empty strings and
+// non-numeric characters (including signs and decimal points) are rejected.
+func parseTimeField(s string, min, max int) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil || v < min || v > max {
+		return 0, false
+	}
+	return v, true
 }
 
 func isBareDecimalSecondsToken(token string) bool {
