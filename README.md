@@ -3,7 +3,8 @@
 A fast command-line countdown timer with live terminal feedback, graceful cancellation,
 and optional completion alarms.
 
-![demo](assets/demo.gif)
+<img src="assets/demo.gif" width="600" alt="timer 3s demo" />
+<img src="assets/demo-wall-clock.gif" width="600" alt="timer 1pm wall clock demo" />
 
 ## Features
 
@@ -244,45 +245,23 @@ are both supported, as are bare hour shorthands (`9am`). `12am` is midnight and
 
 ## How It Works
 
-Run-mode status output is written to `stderr`, leaving `stdout` clean for
-pipeline use.
+Status output is written to `stderr`, leaving `stdout` clean for pipeline use.
 
-In interactive status mode (`stderr` is a TTY), the timer updates every 500ms in
-`HH:MM:SS` format, updating both the terminal line and title bar (when terminal
-capabilities allow it). With `-q` / `--quiet`, the title bar update is suppressed
-and only the inline countdown is shown.
+The countdown updates every 500ms in `HH:MM:SS` format. In a normal terminal session,
+the title bar also updates alongside the inline countdown. On completion, `timer complete`
+is printed and an audio alert plays. Press Ctrl+C at any time to cancel gracefully.
 
-In normal interactive mode, completion prints `timer complete`, plays an alert
-using the best available backend for your platform, and exits.
+With `-q` / `--quiet`, title bar updates, completion text, and the alarm are all
+suppressed. Combine with `-s` to keep the alarm while still running quietly.
 
-With `-q` / `--quiet` in interactive mode, completion and cancellation text are
-also suppressed, and no alarm plays on completion.
+When output is redirected (for example `2> /tmp/timer.log`), the countdown is
+suppressed and only lifecycle lines are emitted: `timer: started (...)`,
+`timer: complete`, and `timer: cancelled`. The alarm does not play automatically
+in this mode unless `--sound` is specified.
 
-When `stderr` is not a TTY (for example, redirected), the timer emits
-lifecycle-only status lines: `timer: started (...)`, `timer: complete`, and
-`timer: cancelled`. With `--quiet`, those non-TTY lifecycle lines are suppressed.
-
-Default alarm playback requires both `stdout` and `stderr` to be TTYs. If either
-stream is piped or redirected, alarm does not auto-run unless explicitly requested
-with `--sound`. When `--sound` is provided, alarm playback is still attempted on
-completion in `--quiet` and non-TTY modes.
-
-On macOS, default sleep inhibition is attempted only when both `stdout` and `stderr`
-are TTYs. In that interactive mode, timer uses `caffeinate -i -d -w <pid>` to also
-keep the display awake. With `--caffeinate`, timer also attempts sleep inhibition in
-non-TTY/piped runs (best effort), but uses `caffeinate -i -w <pid>` (no `-d`).
-On non-macOS systems, `--caffeinate` prints a warning and continues without
-sleep inhibition.
-
-Press Ctrl+C at any time to cancel the timer gracefully. In interactive normal mode,
-the current line is cleared and `timer cancelled` is printed, then the process exits
-with code 130. In non-TTY normal mode, `timer: cancelled` is emitted. In `--quiet`
-mode, cancellation text is suppressed. If the process receives SIGTERM, it exits
-with code 143.
-
-Note that in normal interactive mode, the terminal title bar may retain the last
-displayed time after cancellation depending on your terminal emulator. In
-`TERM=dumb`/minimal environments, advanced terminal control sequences are disabled.
+On macOS, the timer prevents the system from sleeping for its duration. This
+requires a normal interactive session by default; use `--caffeinate` to force it
+when output is redirected.
 
 ## License
 
