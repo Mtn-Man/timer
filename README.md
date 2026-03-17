@@ -3,6 +3,8 @@
 A fast command-line countdown timer with live terminal feedback, graceful cancellation,
 and optional completion alarms.
 
+![demo](assets/demo.gif)
+
 ## Features
 
 - Live countdown display in terminal status output (`stderr`) and title bar (when supported)
