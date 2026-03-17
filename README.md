@@ -176,7 +176,7 @@ timer 9:00      # count down to 9:00 AM today (or tomorrow if already past)
 timer 9am       # count down to 9:00 AM (12-hour shorthand)
 timer 2:30pm    # count down to 2:30 PM
 timer 9:30:30am # count down to 9:30:30 AM
-timer "2:30 PM" # space-separated AM/PM suffix (quotes required)
+timer "2:30 PM" # space-separated AM/PM suffix (quotes optional)
 timer 12pm      # count down to noon
 timer 12am      # count down to midnight
 timer --help    # Show help
