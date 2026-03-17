@@ -20,7 +20,7 @@ and optional completion alarms.
 
 ## Quick Start
 
-Install and run in under a minute:
+Install and run in under a minute (requires [Homebrew](https://brew.sh)):
 
 ```bash
 brew tap Mtn-Man/tools
