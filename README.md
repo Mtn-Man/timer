@@ -1,6 +1,6 @@
 # after
 
-A fast command-line countdown tool with live terminal feedback, graceful cancellation,
+A fast command-line countdown timer with live terminal feedback, graceful cancellation,
 and optional completion alarms.
 
 <img src="assets/demo.gif" width="600" alt="after demo" />
