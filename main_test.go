@@ -24,27 +24,27 @@ func TestShouldRunInternalAlarm(t *testing.T) {
 	}{
 		{
 			name: "worker mode with exact hidden worker arg",
-			args: []string{"timer", internalAlarmArg},
+			args: []string{"after", internalAlarmArg},
 			want: true,
 		},
 		{
 			name: "worker mode with sound file arg",
-			args: []string{"timer", internalAlarmArg, "path/to/sound.mp3"},
+			args: []string{"after", internalAlarmArg, "path/to/sound.mp3"},
 			want: true,
 		},
 		{
 			name: "normal mode when no args",
-			args: []string{"timer"},
+			args: []string{"after"},
 			want: false,
 		},
 		{
 			name: "normal mode with duration arg",
-			args: []string{"timer", "1s"},
+			args: []string{"after", "1s"},
 			want: false,
 		},
 		{
 			name: "normal mode when hidden worker arg has trailing args",
-			args: []string{"timer", internalAlarmArg, "path/to/sound.mp3", "1s"},
+			args: []string{"after", internalAlarmArg, "path/to/sound.mp3", "1s"},
 			want: false,
 		},
 	}
@@ -65,12 +65,12 @@ func TestNewInternalAlarmCmd(t *testing.T) {
 	t.Parallel()
 
 	t.Run("without sound file", func(t *testing.T) {
-		cmd := newInternalAlarmCmd("/tmp/timer-bin", "")
+		cmd := newInternalAlarmCmd("/tmp/after-bin", "")
 		if len(cmd.Args) != 2 {
 			t.Fatalf("newInternalAlarmCmd() args length = %d, want 2", len(cmd.Args))
 		}
-		if cmd.Args[0] != "/tmp/timer-bin" {
-			t.Fatalf("newInternalAlarmCmd() args[0] = %q, want %q", cmd.Args[0], "/tmp/timer-bin")
+		if cmd.Args[0] != "/tmp/after-bin" {
+			t.Fatalf("newInternalAlarmCmd() args[0] = %q, want %q", cmd.Args[0], "/tmp/after-bin")
 		}
 		if cmd.Args[1] != internalAlarmArg {
 			t.Fatalf("newInternalAlarmCmd() args[1] = %q, want %q", cmd.Args[1], internalAlarmArg)
@@ -78,7 +78,7 @@ func TestNewInternalAlarmCmd(t *testing.T) {
 	})
 
 	t.Run("with sound file", func(t *testing.T) {
-		cmd := newInternalAlarmCmd("/tmp/timer-bin", "path/to/sound.mp3")
+		cmd := newInternalAlarmCmd("/tmp/after-bin", "path/to/sound.mp3")
 		if len(cmd.Args) != 3 {
 			t.Fatalf("newInternalAlarmCmd() args length = %d, want 3", len(cmd.Args))
 		}
@@ -90,7 +90,7 @@ func TestNewInternalAlarmCmd(t *testing.T) {
 		}
 	})
 
-	cmd := newInternalAlarmCmd("/tmp/timer-bin", "")
+	cmd := newInternalAlarmCmd("/tmp/after-bin", "")
 	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
 		t.Fatal("newInternalAlarmCmd() should set Setpgid=true")
 	}
@@ -125,12 +125,12 @@ func TestFormatVersionLine(t *testing.T) {
 		{
 			name:    "default dev version",
 			version: "dev",
-			want:    "timer dev\n",
+			want:    "after dev\n",
 		},
 		{
 			name:    "injected release version",
 			version: "v1.2.3",
-			want:    "timer v1.2.3\n",
+			want:    "after v1.2.3\n",
 		},
 	}
 
@@ -364,7 +364,7 @@ type parseInvocationTestCase struct {
 }
 
 func cliArgs(parts ...string) []string {
-	return append([]string{"timer"}, parts...)
+	return append([]string{"after"}, parts...)
 }
 
 func runParseInvocationCases(t *testing.T, tests []parseInvocationTestCase) {
@@ -1402,7 +1402,7 @@ func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
 
-	want := "timer: started (0s)\ntimer: complete\n"
+	want := "after: started (0s)\nafter: complete\n"
 	if got := out.String(); got != want {
 		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, want)
 	}
@@ -1436,7 +1436,7 @@ func TestRunTimerWithAlarmStarter_NonTTYCancelLifecycleOutput(t *testing.T) {
 		t.Fatal("runTimerWithAlarmStarter() error = nil, want cancellation cause")
 	}
 
-	want := "timer: cancelled\n"
+	want := "after: cancelled\n"
 	if got := out.String(); got != want {
 		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, want)
 	}
@@ -1452,8 +1452,8 @@ func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) 
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
-	if !strings.Contains(out.String(), "timer complete\n") {
-		t.Fatalf("runTimerWithAlarmStarter() output = %q, want timer completion text", out.String())
+	if !strings.Contains(out.String(), "after complete\n") {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want after completion text", out.String())
 	}
 }
 

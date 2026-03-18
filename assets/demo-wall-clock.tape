@@ -8,7 +8,7 @@ Set Theme "Catppuccin Mocha"
 Set Padding 40
 
 Sleep 1s
-Type "timer 1pm"
+Type "after 1pm"
 Sleep 500ms
 Enter
 Sleep 3s

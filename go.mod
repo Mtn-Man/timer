@@ -1,4 +1,4 @@
-module github.com/Mtn-Man/timer
+module github.com/Mtn-Man/after
 
 go 1.20
 

@@ -2,11 +2,11 @@
 
 package main
 
-// timer is a simple countdown utility with visual feedback and audio alerts.
-// Usage: timer [options] <duration|time>
-// Examples: timer 30, timer 30s, timer 10m, timer 1.5h, timer 1h2m3s, timer --quiet 3m, timer -q 3m
-//           timer 14:30, timer 9:00, timer 23:59:00
-//           timer 9am, timer 9:30pm, timer 12:00 AM, timer 9 PM
+// after is a simple countdown utility with visual feedback and audio alerts.
+// Usage: after [options] <duration|time>
+// Examples: after 30, after 30s, after 10m, after 1.5h, after 1h2m3s, after --quiet 3m, after -q 3m
+//           after 14:30, after 9:00, after 23:59:00
+//           after 9am, after 9:30pm, after 12:00 AM, after 9 PM
 //
 // Features:
 // - Live countdown display in stderr and terminal title bar
@@ -15,7 +15,7 @@ package main
 // - Ceiling-based display (never shows 00:00:00 while time remains)
 // - Wall clock target mode: counts down to a 24-hour time (e.g. 14:30) or 12-hour time with AM/PM
 //   (e.g. 9am, 2:30 PM); always wraps to the next day if the time has already passed
-// - Prevent sleep on macOS while timer is active (when both streams are interactive by default, or forced with --caffeinate)
+// - Prevent sleep on macOS while after is active (when both streams are interactive by default, or forced with --caffeinate)
 // - Non-TTY-safe lifecycle logging (started/complete/cancelled) in stderr
 
 import (
@@ -36,9 +36,9 @@ import (
 	"golang.org/x/term"
 )
 
-const internalAlarmArg = "__timer_internal_alarm_worker"
+const internalAlarmArg = "__after_internal_alarm_worker"
 const (
-	usageText             = "Usage: timer [options] <duration|time>\nExamples: timer 30, timer 30s, timer 10m, timer 1.5h, timer --quiet 5m, timer 14:30, timer 9am, timer 2:30 PM"
+	usageText             = "Usage: after [options] <duration|time>\nExamples: after 30, after 30s, after 10m, after 1.5h, after --quiet 5m, after 14:30, after 9am, after 2:30 PM"
 	defaultVersion        = "dev"
 	develBuildInfoVersion = "(devel)"
 )
@@ -207,7 +207,7 @@ func renderHelpText() string {
 }
 
 func formatVersionLine(v string) string {
-	return fmt.Sprintf("timer %s\n", v)
+	return fmt.Sprintf("after %s\n", v)
 }
 
 func mainModuleVersion() string {
@@ -685,7 +685,7 @@ func runTimerWithAlarmStarter(ctx context.Context, duration time.Duration, statu
 	defer done.Stop()
 
 	if shouldPrintLifecycleStart(status.interactive, quiet) && ctx.Err() == nil {
-		writeStatusf(status.writer, "timer: started (%s)\n", duration)
+		writeStatusf(status.writer, "after: started (%s)\n", duration)
 	}
 
 	var tickC <-chan time.Time
@@ -757,10 +757,10 @@ func printComplete(status statusDisplay, quiet bool) {
 
 	if status.interactive {
 		clearInteractiveStatusLine(status)
-		writeStatusln(status.writer, "timer complete")
+		writeStatusln(status.writer, "after complete")
 		return
 	}
-	writeStatusln(status.writer, "timer: complete")
+	writeStatusln(status.writer, "after: complete")
 }
 
 func printCancelled(status statusDisplay, quiet bool) {
@@ -771,10 +771,10 @@ func printCancelled(status statusDisplay, quiet bool) {
 
 	if status.interactive {
 		clearInteractiveStatusLine(status)
-		writeStatusln(status.writer, "timer cancelled")
+		writeStatusln(status.writer, "after cancelled")
 		return
 	}
-	writeStatusln(status.writer, "timer: cancelled")
+	writeStatusln(status.writer, "after: cancelled")
 }
 
 func clearInteractiveStatusLine(status statusDisplay) {

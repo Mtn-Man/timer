@@ -8,7 +8,7 @@ Set Theme "Catppuccin Mocha"
 Set Padding 40
 
 Sleep 1s
-Type "timer 3s"
+Type "after 3s"
 Sleep 500ms
 Enter
 Sleep 4.5s

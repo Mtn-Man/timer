@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# release.sh — builds, packages, and publishes a versioned timer release.
+# release.sh — builds, packages, and publishes a versioned after release.
 #
 # Usage: ./scripts/release.sh <version>
 # Example: ./scripts/release.sh v1.4.0
@@ -81,7 +81,7 @@ TARGETS=(
 
 for target in "${TARGETS[@]}"; do
   read -r GOOS GOARCH <<< "$target"
-  BIN="${DIST_DIR}/timer_${GOOS}_${GOARCH}"
+  BIN="${DIST_DIR}/after_${GOOS}_${GOARCH}"
   GOOS="$GOOS" GOARCH="$GOARCH" go build \
     -ldflags "-X main.version=${VERSION}" \
     -o "$BIN" .
@@ -98,14 +98,14 @@ LOCAL_OS="$(uname -s)"
 LOCAL_ARCH="$(uname -m)"
 [[ "$LOCAL_OS" == "Darwin" ]] || err "Smoke test only supported on macOS (got: $LOCAL_OS)"
 case "$LOCAL_ARCH" in
-  x86_64)  HOST_BIN="${DIST_DIR}/timer_darwin_amd64" ;;
-  arm64)   HOST_BIN="${DIST_DIR}/timer_darwin_arm64" ;;
+  x86_64)  HOST_BIN="${DIST_DIR}/after_darwin_amd64" ;;
+  arm64)   HOST_BIN="${DIST_DIR}/after_darwin_arm64" ;;
   *)       err "Unrecognised host architecture: $LOCAL_ARCH" ;;
 esac
 
 VERSION_OUTPUT="$("$HOST_BIN" --version)"
-[[ "$VERSION_OUTPUT" == "timer ${VERSION}" ]] \
-  || err "Smoke test failed: expected 'timer ${VERSION}', got '${VERSION_OUTPUT}'"
+[[ "$VERSION_OUTPUT" == "after ${VERSION}" ]] \
+  || err "Smoke test failed: expected 'after ${VERSION}', got '${VERSION_OUTPUT}'"
 
 success "Smoke test passed: $VERSION_OUTPUT"
 
@@ -119,8 +119,8 @@ cd "$DIST_DIR"
 
 for target in "${TARGETS[@]}"; do
   read -r GOOS GOARCH <<< "$target"
-  ARCHIVE="timer_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
-  tar -czf "$ARCHIVE" "timer_${GOOS}_${GOARCH}"
+  ARCHIVE="after_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
+  tar -czf "$ARCHIVE" "after_${GOOS}_${GOARCH}"
   success "Packaged $ARCHIVE"
 done
 
@@ -130,7 +130,7 @@ done
 
 info "Generating checksums"
 
-shasum -a 256 timer_"${VERSION}"_*.tar.gz > checksums.txt
+shasum -a 256 after_"${VERSION}"_*.tar.gz > checksums.txt
 cat checksums.txt
 
 cd - >/dev/null
@@ -180,10 +180,10 @@ success "Tag $VERSION pushed"
 info "Creating GitHub release $VERSION"
 
 ARTIFACTS=(
-  "${DIST_DIR}/timer_${VERSION}_darwin_amd64.tar.gz"
-  "${DIST_DIR}/timer_${VERSION}_darwin_arm64.tar.gz"
-  "${DIST_DIR}/timer_${VERSION}_linux_amd64.tar.gz"
-  "${DIST_DIR}/timer_${VERSION}_linux_arm64.tar.gz"
+  "${DIST_DIR}/after_${VERSION}_darwin_amd64.tar.gz"
+  "${DIST_DIR}/after_${VERSION}_darwin_arm64.tar.gz"
+  "${DIST_DIR}/after_${VERSION}_linux_amd64.tar.gz"
+  "${DIST_DIR}/after_${VERSION}_linux_arm64.tar.gz"
   "${DIST_DIR}/checksums.txt"
 )
 
@@ -208,15 +208,15 @@ DARWIN_ARM64_SHA="$(awk '/darwin_arm64/ {print $1}' "${DIST_DIR}/checksums.txt")
 LINUX_AMD64_SHA="$(awk '/linux_amd64/  {print $1}' "${DIST_DIR}/checksums.txt")"
 LINUX_ARM64_SHA="$(awk '/linux_arm64/  {print $1}' "${DIST_DIR}/checksums.txt")"
 
-printf '\n\033[1;33m==> Homebrew formula update required (homebrew-tools/Formula/timer.rb)\033[0m\n'
+printf '\n\033[1;33m==> Homebrew formula update required (homebrew-tools/Formula/after.rb)\033[0m\n'
 printf '  version "%s"\n\n' "${VERSION#v}"
-printf '  on_macos / on_intel  url  .../timer_%s_darwin_amd64.tar.gz\n' "$VERSION"
+printf '  on_macos / on_intel  url  .../after_%s_darwin_amd64.tar.gz\n' "$VERSION"
 printf '                       sha256 "%s"\n\n' "$DARWIN_AMD64_SHA"
-printf '  on_macos / on_arm    url  .../timer_%s_darwin_arm64.tar.gz\n' "$VERSION"
+printf '  on_macos / on_arm    url  .../after_%s_darwin_arm64.tar.gz\n' "$VERSION"
 printf '                       sha256 "%s"\n\n' "$DARWIN_ARM64_SHA"
-printf '  on_linux / on_intel  url  .../timer_%s_linux_amd64.tar.gz\n' "$VERSION"
+printf '  on_linux / on_intel  url  .../after_%s_linux_amd64.tar.gz\n' "$VERSION"
 printf '                       sha256 "%s"\n\n' "$LINUX_AMD64_SHA"
-printf '  on_linux / on_arm    url  .../timer_%s_linux_arm64.tar.gz\n' "$VERSION"
+printf '  on_linux / on_arm    url  .../after_%s_linux_arm64.tar.gz\n' "$VERSION"
 printf '                       sha256 "%s"\n\n' "$LINUX_ARM64_SHA"
-printf '  test: assert_match "timer %s"\n' "$VERSION"
-printf '\nCommit message: timer: update formula to %s\n' "$VERSION"
+printf '  test: assert_match "after %s"\n' "$VERSION"
+printf '\nCommit message: after: update formula to %s\n' "$VERSION"
