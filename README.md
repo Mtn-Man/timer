@@ -127,10 +127,6 @@ go build -o after .
 ./after --version
 ```
 
-For local source builds, `--version` reports `after dev`.
-When installed with `go install github.com/Mtn-Man/after@<version>`, `--version`
-typically reports that module version.
-
 ## Usage
 ```bash
 after [options] <duration>
@@ -184,8 +180,7 @@ supported, as are bare hour shorthands (`9am`). `12am` is midnight and `12pm` is
 ### Flags
 
 - `-h`, `--help`: Show help and exit
-- `-v`, `--version`: Show version and exit (reports injected build version, module
-  version when available, or `after dev` for local non-injected builds)
+- `-v`, `--version`: Show version and exit
 - `-q`, `--quiet`: TTY: inline countdown only (no title bar updates, completion line,
   alarm, or cancel text). Non-TTY: suppress lifecycle status output. Combine with
   `-s` (`-qs`) to keep the alarm while still suppressing the title bar.
@@ -212,8 +207,6 @@ supported, as are bare hour shorthands (`9am`). `12am` is midnight and `12pm` is
   or install to `~/.local/bin` instead.
 - Homebrew command ambiguity with an existing `after` formula: use
   `brew install Mtn-Man/tools/after` and `brew info Mtn-Man/tools/after`.
-- `after --version` shows `after dev`: This is expected for local source builds
-  without `-ldflags "-X main.version=vX.Y.Z"` (for example, `go build .`).
 
 ## How It Works
 
