@@ -22,7 +22,7 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, status.interactive, forceAwake) {
 		pid := strconv.Itoa(os.Getpid())
 		cmd := quietCmd("caffeinate", sleepInhibitorArgs(sideEffectsInteractive, status.interactive, pid)...)
-		go cmd.Run() // best-effort; -w <pid> ensures caffeinate exits when we do
+		go func() { _ = cmd.Run() }() // best-effort; -w <pid> ensures caffeinate exits when we do
 	}
 
 	deadline := time.Now().Add(duration)
@@ -51,7 +51,7 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 		if err == nil {
 			var once sync.Once
 			restoreTerminal = func() {
-				once.Do(func() { term.Restore(int(os.Stdin.Fd()), oldState) })
+				once.Do(func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) })
 			}
 			defer restoreTerminal()
 
