@@ -219,10 +219,10 @@ info "Updating Homebrew formula"
 BARE_VERSION="${VERSION#v}"
 OLD_BARE_VERSION="$(grep -m1 'version "' "$FORMULA" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 
-OLD_DARWIN_AMD64_SHA="$(awk '/darwin_amd64/{f=1} f && /sha256/{match($0,/sha256 "([^"]+)"/,a); print a[1]; f=0}' "$FORMULA")"
-OLD_DARWIN_ARM64_SHA="$(awk '/darwin_arm64/{f=1} f && /sha256/{match($0,/sha256 "([^"]+)"/,a); print a[1]; f=0}' "$FORMULA")"
-OLD_LINUX_AMD64_SHA="$(awk '/linux_amd64/{f=1} f && /sha256/{match($0,/sha256 "([^"]+)"/,a); print a[1]; f=0}' "$FORMULA")"
-OLD_LINUX_ARM64_SHA="$(awk '/linux_arm64/{f=1} f && /sha256/{match($0,/sha256 "([^"]+)"/,a); print a[1]; f=0}' "$FORMULA")"
+OLD_DARWIN_AMD64_SHA="$(grep -A1 'darwin_amd64' "$FORMULA" | grep -oE '[0-9a-f]{64}')"
+OLD_DARWIN_ARM64_SHA="$(grep -A1 'darwin_arm64' "$FORMULA" | grep -oE '[0-9a-f]{64}')"
+OLD_LINUX_AMD64_SHA="$(grep -A1 'linux_amd64'  "$FORMULA" | grep -oE '[0-9a-f]{64}')"
+OLD_LINUX_ARM64_SHA="$(grep -A1 'linux_arm64'  "$FORMULA" | grep -oE '[0-9a-f]{64}')"
 
 sed -i '' \
   -e "s/version \"${OLD_BARE_VERSION}\"/version \"${BARE_VERSION}\"/" \
