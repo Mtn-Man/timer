@@ -105,6 +105,7 @@ func TestRenderHelpText(t *testing.T) {
 		"  -q, --quiet      TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm\n" +
 		"  -s, --sound      Force alarm playback on completion even in quiet/non-TTY mode\n" +
 		"  -f, --sound-file Path to a custom audio file to play on completion (implies --sound)\n" +
+		"  -t, --no-title   Disable terminal title bar updates\n" +
 		"  -c, --caffeinate Force sleep inhibition attempt even in non-TTY mode (darwin only)\n\n" +
 		"Note: -- ends option parsing; subsequent tokens are treated as positional arguments.\n"
 
@@ -468,6 +469,11 @@ func TestParseInvocation_RunModeFlagsAndDuration(t *testing.T) {
 		{name: "awake short flag with duration", args: cliArgs("-c", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAwake: true}},
 		{name: "awake and quiet with duration", args: cliArgs("--caffeinate", "--quiet", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAwake: true}},
 		{name: "awake short and quiet with duration", args: cliArgs("-c", "-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAwake: true}},
+		{name: "no-title long flag with duration", args: cliArgs("--no-title", "1s"), want: invocation{mode: modeRun, duration: time.Second, noTitle: true}},
+		{name: "no-title short flag with duration", args: cliArgs("-t", "1s"), want: invocation{mode: modeRun, duration: time.Second, noTitle: true}},
+		{name: "no-title and quiet with duration", args: cliArgs("--no-title", "--quiet", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, noTitle: true}},
+		{name: "quiet alone does not set noTitle", args: cliArgs("-q", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, noTitle: false}},
+		{name: "combined no-title and quiet short flags", args: cliArgs("-tq", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, noTitle: true}},
 		{name: "quiet and alarm with duration", args: cliArgs("--quiet", "--sound", "1s"), want: invocation{mode: modeRun, duration: time.Second, quiet: true, forceAlarm: true}},
 		{name: "alarm and awake together", args: cliArgs("--sound", "--caffeinate", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true, forceAwake: true}},
 		{name: "sound file long flag", args: cliArgs("--sound-file", "path/to/sound.mp3", "1s"), want: invocation{mode: modeRun, duration: time.Second, forceAlarm: true, soundFile: "path/to/sound.mp3"}},
@@ -1207,7 +1213,7 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 		interactive:      false,
 		supportsAdvanced: false,
 	}
-	err := runTimer(ctx, cancel, time.Hour, status, false, false, false, false, "")
+	err := runTimer(ctx, cancel, time.Hour, status, false, false, false, false, false, "")
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
@@ -1237,7 +1243,7 @@ func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 
 	status := newStatusDisplay(io.Discard, false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, true, false, "", func(string) {
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, true, false, "", func(string) {
 		alarmCalls++
 	})
 	if err != nil {
@@ -1286,7 +1292,7 @@ func TestRunTimerWithAlarmStarter_DefaultAlarmRequiresBothStreamsTTY(t *testing.
 			alarmCalls := 0
 			status := newStatusDisplay(io.Discard, tc.statusInteractive, false)
 
-			err := runTimerWithAlarmStarter(ctx, cancel, 0, status, tc.sideEffectsInteractive, false, false, false, "", func(string) {
+			err := runTimerWithAlarmStarter(ctx, cancel, 0, status, tc.sideEffectsInteractive, false, false, false, false, "", func(string) {
 				alarmCalls++
 			})
 			if err != nil {
@@ -1493,7 +1499,7 @@ func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 	defer cancel(nil)
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, false, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -1511,7 +1517,7 @@ func TestRunTimerWithAlarmStarter_NonTTYQuietSuppressesLifecycle(t *testing.T) {
 	defer cancel(nil)
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -1528,7 +1534,7 @@ func TestRunTimerWithAlarmStarter_NonTTYCancelLifecycleOutput(t *testing.T) {
 
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 10*time.Second, status, false, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 10*time.Second, status, false, false, false, false, false, "", func(string) {})
 	if err == nil {
 		t.Fatal("runTimerWithAlarmStarter() error = nil, want cancellation cause")
 	}
@@ -1546,7 +1552,7 @@ func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) 
 	defer cancel(nil)
 	out, status := newCapturedStatus(true, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, false, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -1562,12 +1568,12 @@ func TestRunTimerWithAlarmStarter_InteractiveQuietClearsStatusLine(t *testing.T)
 	defer cancel(nil)
 	out, status := newCapturedStatus(true, true)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
-	if got := out.String(); got != "\r\033[K00:00:00\r\033[K" {
-		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, "\r\\033[K00:00:00\r\\033[K")
+	if got := out.String(); got != "\033]0;00:00:00\007\r\033[K00:00:00\r\033[K" {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, "\033]0;00:00:00\007\r\\033[K00:00:00\r\\033[K")
 	}
 }
 
@@ -1726,6 +1732,56 @@ func TestStripAMPM(t *testing.T) {
 			}
 			if tc.wantFound && gotIsPM != tc.wantIsPM {
 				t.Fatalf("stripAMPM(%q) isPM = %v, want %v", tc.token, gotIsPM, tc.wantIsPM)
+			}
+		})
+	}
+}
+
+func TestRenderInteractiveCountdown(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		supportsAdvanced bool
+		noTitle          bool
+		want             string
+	}{
+		{
+			name:             "advanced terminal without noTitle emits OSC title sequence",
+			supportsAdvanced: true,
+			noTitle:          false,
+			want:             "\033]0;00:01:00\007\r\033[K00:01:00",
+		},
+		{
+			name:             "advanced terminal with noTitle suppresses OSC title sequence",
+			supportsAdvanced: true,
+			noTitle:          true,
+			want:             "\r\033[K00:01:00",
+		},
+		{
+			name:             "dumb terminal never emits OSC title sequence regardless of noTitle",
+			supportsAdvanced: false,
+			noTitle:          false,
+			want:             "\r00:01:00",
+		},
+		{
+			name:             "dumb terminal with noTitle still uses simple carriage return",
+			supportsAdvanced: false,
+			noTitle:          true,
+			want:             "\r00:01:00",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			status := newStatusDisplay(&buf, true, tc.supportsAdvanced)
+			renderInteractiveCountdown(status, "00:01:00", tc.noTitle)
+			if got := buf.String(); got != tc.want {
+				t.Fatalf("renderInteractiveCountdown() = %q, want %q", got, tc.want)
 			}
 		})
 	}

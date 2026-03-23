@@ -12,11 +12,11 @@ import (
 	"golang.org/x/term"
 )
 
-func runTimer(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, soundFile string) error {
-	return runTimerWithAlarmStarter(ctx, cancel, duration, status, sideEffectsInteractive, quiet, forceAlarm, forceAwake, soundFile, startAlarmProcess)
+func runTimer(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, noTitle bool, forceAlarm bool, forceAwake bool, soundFile string) error {
+	return runTimerWithAlarmStarter(ctx, cancel, duration, status, sideEffectsInteractive, quiet, noTitle, forceAlarm, forceAwake, soundFile, startAlarmProcess)
 }
 
-func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, forceAlarm bool, forceAwake bool, soundFile string, alarmStarter func(string)) error {
+func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, noTitle bool, forceAlarm bool, forceAwake bool, soundFile string, alarmStarter func(string)) error {
 	bothStreamsInteractive := sideEffectsInteractive && status.interactive
 
 	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, status.interactive, forceAwake) {
@@ -41,7 +41,7 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 	}
 
 	if status.interactive {
-		renderInteractiveCountdown(status, formatRemainingTime(duration), quiet)
+		renderInteractiveCountdown(status, formatRemainingTime(duration), noTitle)
 	}
 
 	var keyCh <-chan struct{}
@@ -111,7 +111,7 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 				continue
 			}
 
-			renderInteractiveCountdown(status, formatRemainingTime(remaining), quiet)
+			renderInteractiveCountdown(status, formatRemainingTime(remaining), noTitle)
 		}
 	}
 }

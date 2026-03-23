@@ -11,7 +11,8 @@ and optional completion alarms.
 - Graceful cancellation via Ctrl+C, or `q` / Esc / Ctrl+D in interactive mode
 - Audio alert on completion (best-effort, platform-specific backend)
 - Count down to a time of day in 24-hour or 12-hour AM/PM format
-- Optional `-q`/`--quiet` mode for inline countdown only
+- Optional `-q`/`--quiet` to suppress alarm, completion text, and lifecycle output
+- Optional `-t`/`--no-title` to suppress terminal title bar updates (useful in tmux/screen environments)
 - Optional `-s`/`--sound` to force alarm playback on completion
 - Optional `-c`/`--caffeinate` to force sleep-inhibition attempt in non-TTY mode (macOS only)
 - Ceiling-based display (never shows 00:00:00 while time remains)
@@ -134,15 +135,16 @@ after [options] <time>
 after --help
 after --version
 after --quiet <duration>
+after --no-title <duration>
 after --sound <duration>
 after --sound-file <path> <duration>
 after --caffeinate <duration>
-after -qs <duration>
+after -qt <duration>
 ```
 
 For ergonomics, options may be placed before or after the duration operand
 (for example, `after -q 5m` and `after 5m -q` are both supported).
-You can also combine short flags such as `-qs`.
+You can also combine short flags such as `-qt` or `-qts`.
 
 ### Examples
 ```bash
@@ -160,9 +162,12 @@ after noon      # count down to noon
 after midnight  # count down to midnight
 after 12pm      # same as noon
 after 12am      # same as midnight
-after -q 5m     # Quiet mode: inline countdown only
+after -q 5m     # Quiet mode: no alarm, completion text, or lifecycle output
+after -t 5m     # No title bar updates; countdown and alarm still active
+after -qt 5m    # Quiet + no title bar (no alarm, no messages, no title)
 after -s 5m     # Force alarm playback even in quiet/non-TTY mode
-after -qs 5m    # Inline countdown + alarm, no title bar updates
+after -qs 5m    # Force alarm + quiet (no messages, title bar still updates)
+after -qts 5m   # Force alarm + quiet + no title bar
 after --sound-file ~/Sounds/bell.mp3 5m       # Play custom sound on completion
 after -f /System/Library/Sounds/Funk.aiff 5  # macOS: play a built-in alert sound
 after -f "~/Music/Alarm Sounds/bell.mp3" 5m  # Quoted path with spaces
@@ -184,9 +189,12 @@ accepted as named aliases (equivalent to `12pm` and `12am`).
 
 - `-h`, `--help`: Show help and exit
 - `-v`, `--version`: Show version and exit
-- `-q`, `--quiet`: TTY: inline countdown only (no title bar updates, completion line,
-  alarm, or cancel text). Non-TTY: suppress lifecycle status output. Combine with
-  `-s` (`-qs`) to keep the alarm while still suppressing the title bar.
+- `-q`, `--quiet`: TTY: suppress alarm, completion text, and cancel text (inline
+  countdown still runs, title bar still updates). Non-TTY: suppress lifecycle status
+  output. Combine with `-s` (`-qs`) to keep the alarm while suppressing other output.
+- `-t`, `--no-title`: Suppress terminal title bar updates. Useful in multiplexers
+  like tmux or screen where title changes affect window names. Combine with `-q`
+  (`-qt`) to suppress both.
 - `-s`, `--sound`: Force alarm playback on completion even in `--quiet` or non-TTY mode
 - `-f`, `--sound-file <path>`: Path to a custom audio file to play on completion
   (implies `--sound`; supported on macOS, Linux, and FreeBSD). If the file cannot
@@ -220,8 +228,11 @@ the title bar also updates alongside the inline countdown. On completion, `after
 is printed and an audio alert plays. Press Ctrl+C at any time to cancel gracefully.
 In an interactive terminal session, `q`, Esc, and Ctrl+D also cancel.
 
-With `-q` / `--quiet`, title bar updates, completion text, and the alarm are all
-suppressed. Combine with `-s` to keep the alarm while still running quietly.
+With `-q` / `--quiet`, the alarm, completion text, and cancel text are suppressed;
+the inline countdown and title bar updates continue. Combine with `-s` to keep the
+alarm while still suppressing other output. Use `-t` / `--no-title` to suppress
+title bar updates independently — handy in tmux or screen sessions. Combine `-q`
+and `-t` (`-qt`) to suppress both.
 
 When output is redirected (for example `2> /tmp/after.log`), the countdown is
 suppressed and only lifecycle lines are emitted: `after: started (...)`,

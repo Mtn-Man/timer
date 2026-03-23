@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-func renderInteractiveCountdown(status statusDisplay, timeStr string, quiet bool) {
+func renderInteractiveCountdown(status statusDisplay, timeStr string, noTitle bool) {
 	if status.supportsAdvanced {
-		if quiet {
+		if noTitle {
 			writeStatusf(status.writer, "\r\033[K%s", timeStr)
 			return
 		}

@@ -80,6 +80,7 @@ type invocation struct {
 	mode       invocationMode
 	duration   time.Duration
 	quiet      bool
+	noTitle    bool
 	forceAlarm bool
 	forceAwake bool
 	soundFile  string
@@ -104,6 +105,7 @@ var cliFlags = []cliFlag{
 	{short: "-q", long: "--quiet", description: "TTY: inline countdown only; non-TTY: suppress lifecycle/completion/cancel/alarm"},
 	{short: "-s", long: "--sound", description: "Force alarm playback on completion even in quiet/non-TTY mode"},
 	{short: "-f", long: "--sound-file", description: "Path to a custom audio file to play on completion (implies --sound)", takesValue: true},
+	{short: "-t", long: "--no-title", description: "Disable terminal title bar updates"},
 	{short: "-c", long: "--caffeinate", description: "Force sleep inhibition attempt even in non-TTY mode (darwin only)"},
 }
 
@@ -160,7 +162,7 @@ func main() {
 	}
 	sideEffectsInteractive := stdoutIsTTY()
 
-	if err := runTimer(ctx, cancel, inv.duration, status, sideEffectsInteractive, inv.quiet, inv.forceAlarm, inv.forceAwake, inv.soundFile); err != nil {
+	if err := runTimer(ctx, cancel, inv.duration, status, sideEffectsInteractive, inv.quiet, inv.noTitle, inv.forceAlarm, inv.forceAwake, inv.soundFile); err != nil {
 		os.Exit(exitCodeForCancelError(err))
 	}
 }

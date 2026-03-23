@@ -54,6 +54,9 @@ func parseInvocation(args []string) (invocation, error) {
 				inv.forceAlarm = true
 				i++ // skip path
 				continue
+			case "-t", "--no-title":
+				inv.noTitle = true
+				continue
 			case "-c", "--caffeinate":
 				inv.forceAwake = true
 				continue
