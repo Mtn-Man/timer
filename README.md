@@ -108,7 +108,7 @@ after --version
 
 ### Install With Go
 
-Prerequisite: Go 1.20+ installed. Get Go: https://go.dev/dl/
+Prerequisite: Go 1.23+ installed. Get Go: https://go.dev/dl/
 
 Install the latest version:
 ```bash
@@ -205,7 +205,7 @@ accepted as named aliases (equivalent to `12pm` and `12am`).
 
 ## Requirements
 
-- Go 1.20+ required only for building from source
+- Go 1.23+ required only for building from source
 - A Unix-like OS (macOS, Linux, or BSD) for source builds
 
 ## Troubleshooting
