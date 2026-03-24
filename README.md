@@ -1,25 +1,8 @@
 # after
 
-A fast command-line countdown timer with live terminal feedback,
-graceful cancellation, and optional completion alarms.
+A simple countdown timer for the terminal.
 
 <img src="assets/demo.gif" width="600" alt="after demo" />
-
-## Features
-
-- Live countdown display in the terminal and title bar (when supported)
-- Graceful cancellation via Ctrl+C, or `q` / Esc / Ctrl+D in interactive mode
-- Audio alert on completion (best-effort, platform-specific backend)
-- Count down to a time of day in 24-hour or 12-hour AM/PM format
-- Optional `-q`/`--quiet` to suppress alarm and status output
-- Optional `-t`/`--no-title` to suppress terminal title bar updates
-  (useful in tmux/screen environments)
-- Optional `-s`/`--sound` to force alarm playback on completion
-- Optional `-c`/`--caffeinate` to force sleep inhibition in non-TTY
-  mode (macOS only)
-- Ceiling-based display (never shows 00:00:00 while time remains)
-- Non-TTY lifecycle logging by default (`started`/`complete`/`cancelled`)
-- Clean, minimal interface
 
 ## Quick Start
 
@@ -33,13 +16,13 @@ after 10m
 
 If `after` is not found once installed, see [Troubleshooting](#troubleshooting).
 
-## Platform Support
+## Features
 
-- Prebuilt release binaries are published for tested platforms: macOS and Linux
-  (`amd64` and `arm64`).
-- BSD systems are expected to work when building from source, but prebuilt BSD
-  binaries are not currently published.
-- Windows is currently unsupported.
+- Live countdown display in the terminal and title bar
+- Audio alert on completion (best-effort, platform-specific)
+- Count down to a time of day in 24-hour or 12-hour AM/PM format
+- Keeps macOS awake while the timer runs (except when piped or backgrounded)
+- Plays well in scripts and pipelines
 
 ## Installation
 
@@ -66,8 +49,8 @@ after --version
    - `after_<version>_linux_amd64.tar.gz`
    - `after_<version>_linux_arm64.tar.gz`
    Note: release filenames use `darwin` to refer to macOS.
-   The examples below use macOS Apple Silicon filenames; swap in the archive
-   and binary names for your OS/architecture.
+   The examples below use macOS Apple Silicon filenames; swap in the
+   archive and binary names for your OS/architecture.
 2. Verify checksum (optional but recommended):
    Example for macOS Apple Silicon:
    ```bash
@@ -85,15 +68,17 @@ after --version
    ```bash
    sudo install -m 0755 after_darwin_arm64 /usr/local/bin/after
    ```
-   If you are on a different platform, replace the archive and binary filenames
-   above with the matching release files for your OS/architecture.
+   If you are on a different platform, replace the archive and binary
+   filenames above with the matching release files for your
+   OS/architecture.
 5. Alternative (no `sudo`): install to `~/.local/bin`:
    ```bash
    mkdir -p ~/.local/bin
    install -m 0755 after_darwin_arm64 ~/.local/bin/after
    ```
-   If `~/.local/bin` is not in your `PATH`, add it to your shell startup file
-   (for example, `~/.zshrc` or `~/.bashrc`), then reload your shell:
+   If `~/.local/bin` is not in your `PATH`, add it to your shell
+   startup file (for example, `~/.zshrc` or `~/.bashrc`), then reload
+   your shell:
    ```bash
    # zsh
    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
@@ -131,41 +116,35 @@ go build -o after .
 ```
 
 ## Usage
-```bash
-after [options] <duration>
-after [options] <time>
-after --help
-after --version
-after --quiet <duration>
-after --no-title <duration>
-after --sound <duration>
-after --sound-file <path> <duration>
-after --caffeinate <duration>
-after -qt <duration>
-```
 
-For ergonomics, options may be placed before or after the duration operand
-(for example, `after -q 5m` and `after 5m -q` are both supported).
-You can also combine short flags such as `-qt` or `-qts`.
-
-### Examples
 ```bash
 after 30s       # 30 seconds
 after 30        # 30 seconds (bare numbers are seconds)
 after 5m        # 5 minutes
 after 1.5h      # 1.5 hours
-after 90m       # 90 minutes
-after 14:30     # count down to 2:30 PM today (or tomorrow if already past)
-after 9:00      # count down to 9:00 AM today (or tomorrow if already past)
+after 14:30     # count down to 2:30 PM today (or tomorrow if past)
+after 9:00      # count down to 9:00 AM today (or tomorrow if past)
 after 9am       # count down to 9:00 AM (12-hour shorthand)
 after 9a        # same as 9am (single-letter AM/PM suffix)
 after 9p        # count down to 9:00 PM (single-letter shorthand)
-after 2:30pm    # count down to 2:30 PM
-after 2:30 PM   # space-separated AM/PM suffix
 after noon      # count down to noon
 after midnight  # count down to midnight
-after 12pm      # same as noon
-after 12am      # same as midnight
+```
+
+Durations can be expressed as seconds (`30`, `90`), decimals (`1.5`),
+or with unit suffixes (`30s`, `10m`, `1.5h`, `1h30m`). Bare integers
+are treated as seconds.
+
+You can also pass a time of day instead of a duration — after counts
+down to the next occurrence of that time, wrapping to the following day
+if it has already passed. Both 24-hour (`14:30`) and 12-hour AM/PM
+formats (`2:30pm`, `"2:30 PM"`) are supported, as are bare hour
+shorthands (`9am`, `9a`, `9p`). `noon` and `midnight` are also accepted
+as named aliases (equivalent to `12pm` and `12am`).
+
+### Flags and advanced examples
+
+```bash
 after -q 5m     # Quiet mode: no alarm, completion text, or lifecycle output
 after -t 5m     # No title bar updates; countdown and alarm still active
 after -qt 5m    # Quiet + no title bar (no alarm, no messages, no title)
@@ -180,16 +159,9 @@ after 10m 2> /tmp/after.status               # Capture lifecycle output
 after -s 10m 2> /dev/null &                  # backgrounded with alarm
 ```
 
-Durations can be expressed as seconds (`30`, `90`), decimals (`1.5`),
-or with unit suffixes (`30s`, `10m`, `1.5h`, `1h30m`). Bare integers
-are treated as seconds.
-
-You can also pass a time of day instead of a duration — after counts
-down to the next occurrence of that time, wrapping to the following day
-if it has already passed. Both 24-hour (`14:30`) and 12-hour AM/PM
-formats (`2:30pm`, `"2:30 PM"`) are supported, as are bare hour
-shorthands (`9am`, `9a`, `9p`). `noon` and `midnight` are also accepted
-as named aliases (equivalent to `12pm` and `12am`).
+Options may be placed before or after the duration operand (`after -q 5m`
+and `after 5m -q` are both supported). Short flags can be combined:
+`-qt`, `-qs`, `-qts`.
 
 ### Flags
 
@@ -214,26 +186,10 @@ as named aliases (equivalent to `12pm` and `12am`).
 - `--`: End option parsing; all following tokens are treated as
   positional arguments
 
-## Requirements
-
-- Go 1.23+ required only for building from source
-- A Unix-like OS (macOS, Linux, or BSD) for source builds
-
-## Troubleshooting
-
-- `after` not found after install (`after: command not found`): Ensure
-  your install location is in `PATH` (`/opt/homebrew/bin` or
-  `/usr/local/bin` for Homebrew, `$(go env GOPATH)/bin` or `GOBIN` for
-  `go install`, `/usr/local/bin` or `~/.local/bin` for manual install),
-  then restart or reload your shell.
-- `Permission denied` while installing to `/usr/local/bin`: Use
-  `sudo install ...` or install to `~/.local/bin` instead.
-- Homebrew command ambiguity with an existing `after` formula: use
-  `brew install Mtn-Man/tools/after` and `brew info Mtn-Man/tools/after`.
-
 ## How It Works
 
-Status output is written to `stderr`, leaving `stdout` clean for pipeline use.
+Status output is written to `stderr`, leaving `stdout` clean for
+pipeline use.
 
 The countdown updates every 500ms, showing only significant fields
 (`1:23` for 83 seconds, `1:02:03` for just over an hour). In a normal
@@ -249,14 +205,36 @@ with `-s` to keep the alarm while still suppressing other output. Use
 handy in tmux or screen sessions. Combine `-q` and `-t` (`-qt`) to
 suppress both.
 
-When output is redirected (for example `2> /tmp/after.log`), the countdown is
-suppressed and only lifecycle lines are emitted: `after: started (...)`,
-`after: complete`, and `after: cancelled`. The alarm does not play automatically
-in this mode unless `--sound` is specified.
+When output is redirected (for example `2> /tmp/after.log`), the
+countdown is suppressed and only lifecycle lines are emitted:
+`after: started (...)`, `after: complete`, and `after: cancelled`. The
+alarm does not play automatically in this mode unless `--sound` is
+specified.
 
-On macOS, after prevents the system from sleeping for its duration. This
-requires a normal interactive session by default; use `--caffeinate` to force it
-when output is redirected.
+On macOS, after prevents the system from sleeping for its duration.
+This requires a normal interactive session by default; use
+`--caffeinate` to force it when output is redirected.
+
+## Requirements
+
+- Go 1.23+ required only for building from source
+- A Unix-like OS (macOS, Linux, or BSD) for source builds
+- Prebuilt binaries are published for macOS and Linux (`amd64` and
+  `arm64`). BSD is expected to work from source; 
+  Windows is currently unsupported.
+
+## Troubleshooting
+
+- `after` not found after install (`after: command not found`): Ensure
+  your install location is in `PATH` (`/opt/homebrew/bin` or
+  `/usr/local/bin` for Homebrew, `$(go env GOPATH)/bin` or `GOBIN` for
+  `go install`, `/usr/local/bin` or `~/.local/bin` for manual install),
+  then restart or reload your shell.
+- `Permission denied` while installing to `/usr/local/bin`: Use
+  `sudo install ...` or install to `~/.local/bin` instead.
+- Homebrew command ambiguity with an existing `after` formula: use
+  `brew install Mtn-Man/tools/after` and
+  `brew info Mtn-Man/tools/after`.
 
 ## License
 
