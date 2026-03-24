@@ -48,6 +48,7 @@ after --version
    - `after_<version>_darwin_arm64.tar.gz`
    - `after_<version>_linux_amd64.tar.gz`
    - `after_<version>_linux_arm64.tar.gz`
+
    Note: release filenames use `darwin` to refer to macOS.
    The examples below use macOS Apple Silicon filenames; swap in the
    archive and binary names for your OS/architecture.
@@ -118,50 +119,53 @@ go build -o after .
 ## Usage
 
 ```bash
-after 30s       # 30 seconds
-after 30        # 30 seconds (bare numbers are seconds)
-after 5m        # 5 minutes
-after 1.5h      # 1.5 hours
-after 14:30     # count down to 2:30 PM today (or tomorrow if past)
-after 9:00      # count down to 9:00 AM today (or tomorrow if past)
-after 9am       # count down to 9:00 AM (12-hour shorthand)
-after 9a        # same as 9am (single-letter AM/PM suffix)
-after 9p        # count down to 9:00 PM (single-letter shorthand)
-after noon      # count down to noon
-after midnight  # count down to midnight
+after [options] <duration|time>
 ```
 
-Durations can be expressed as seconds (`30`, `90`), decimals (`1.5`),
-or with unit suffixes (`30s`, `10m`, `1.5h`, `1h30m`). Bare integers
-are treated as seconds.
+Durations are relative. Times refer to the next occurrence —
+wrapping to tomorrow if already passed.
 
-You can also pass a time of day instead of a duration — after counts
-down to the next occurrence of that time, wrapping to the following day
-if it has already passed. Both 24-hour (`14:30`) and 12-hour AM/PM
-formats (`2:30pm`, `"2:30 PM"`) are supported, as are bare hour
-shorthands (`9am`, `9a`, `9p`). `noon` and `midnight` are also accepted
-as named aliases (equivalent to `12pm` and `12am`).
-
-### Flags and advanced examples
+### Examples
 
 ```bash
-after -q 5m     # Quiet mode: no alarm, completion text, or lifecycle output
-after -t 5m     # No title bar updates; countdown and alarm still active
-after -qt 5m    # Quiet + no title bar (no alarm, no messages, no title)
-after -s 5m     # Force alarm playback even in quiet/non-TTY mode
-after -qs 5m    # Force alarm + quiet (no messages, title bar still updates)
-after -qts 5m   # Force alarm + quiet + no title bar
-after --sound-file ~/Sounds/bell.mp3 5m      # Play custom sound on completion
-after -f /System/Library/Sounds/Funk.aiff 5  # macOS built-in alert sound
-after -f "~/Music/Alarm Sounds/bell.mp3" 5m  # Quoted path with spaces
-after -c 10m 2> /tmp/after.log               # Force sleep inhibition in non-TTY
-after 10m 2> /tmp/after.status               # Capture lifecycle output
-after -s 10m 2> /dev/null &                  # backgrounded with alarm
+after 30s       # 30 seconds
+after 5m        # 5 minutes
+after 1h30m     # 1 hour 30 minutes
+after 30        # bare numbers are seconds
+
+after 14:30     # next 2:30 PM (24-hour time)
+after 9am       # next 9:00 AM
+after 9p        # next 9:00 PM
+
+after -q 5m     # quiet (no output or alarm)
+after -s 5m     # force alarm
 ```
 
-Options may be placed before or after the duration operand (`after -q 5m`
-and `after 5m -q` are both supported). Short flags can be combined:
-`-qt`, `-qs`, `-qts`.
+### More examples
+
+```bash
+after 90m       # 90 minutes
+after 1.5h      # 1.5 hours
+
+after 9a        # shorthand for 9am
+after 2:30pm    # 12-hour time
+after 2:30 PM   # space-separated AM/PM
+after noon      # 12:00 PM
+after midnight  # 12:00 AM
+
+after -qs 5m    # quiet, but keep alarm
+after -qt 5m    # quiet + no title bar updates
+after -qts 5m   # quiet + no title bar + force alarm
+
+after --sound-file ~/Sounds/bell.mp3 5m
+after -f /System/Library/Sounds/Funk.aiff 5
+
+after 10m 2> /tmp/after.log    # capture lifecycle output
+after -s 10m 2> /dev/null &    # background with alarm
+```
+
+Options may be placed before or after the time value. Short flags
+can be combined: `-qt`, `-qs`, `-qts`.
 
 ### Flags
 
