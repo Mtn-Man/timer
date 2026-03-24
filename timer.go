@@ -62,33 +62,41 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 	var keyCh <-chan struct{}
 	restoreTerminal := func() {}
 	if status.interactive && stdinIsTTY() {
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		tty, err := os.Open("/dev/tty")
 		if err == nil {
-			var once sync.Once
-			restoreTerminal = func() {
-				once.Do(func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) })
-			}
-			defer restoreTerminal()
-
-			ch := make(chan struct{}, 1)
-			keyCh = ch
-			go func() {
-				buf := make([]byte, 1)
-				for {
-					n, err := os.Stdin.Read(buf)
-					if err != nil || n == 0 {
-						return
-					}
-					b := buf[0]
-					if b == 'q' || b == 'Q' || b == 0x1B || b == 0x03 || b == 0x04 {
-						select {
-						case ch <- struct{}{}:
-						default:
-						}
-						return
-					}
+			oldState, err := term.MakeRaw(int(tty.Fd()))
+			if err == nil {
+				var once sync.Once
+				restoreTerminal = func() {
+					once.Do(func() {
+						_ = term.Restore(int(tty.Fd()), oldState)
+						tty.Close()
+					})
 				}
-			}()
+				defer restoreTerminal()
+
+				ch := make(chan struct{}, 1)
+				keyCh = ch
+				go func() {
+					buf := make([]byte, 1)
+					for {
+						n, err := tty.Read(buf)
+						if err != nil || n == 0 {
+							return
+						}
+						b := buf[0]
+						if b == 'q' || b == 'Q' || b == 0x1B || b == 0x03 || b == 0x04 {
+							select {
+							case ch <- struct{}{}:
+							default:
+							}
+							return
+						}
+					}
+				}()
+			} else {
+				tty.Close()
+			}
 		}
 	}
 
