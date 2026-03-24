@@ -93,11 +93,12 @@ func parseInvocation(args []string) (invocation, error) {
 		return invocation{mode: modeRun}, errUsage
 	}
 
-	duration, err := parseDurationToken(durationToken)
+	duration, target, err := parseDurationToken(durationToken)
 	if err != nil {
 		return invocation{mode: modeRun}, err
 	}
 	inv.duration = duration
+	inv.wallClockTarget = target
 	return inv, nil
 }
 
@@ -176,26 +177,26 @@ func expandCombinedShortFlag(arg string, knownShortFlags map[rune]cliFlag) ([]st
 	return expanded, true
 }
 
-func parseDurationToken(token string) (time.Duration, error) {
-	if d, ok, err := parseWallClockTime(token, time.Now()); ok {
-		return d, err
+func parseDurationToken(token string) (time.Duration, time.Time, error) {
+	if d, target, ok, err := parseWallClockTime(token, time.Now()); ok {
+		return d, target, err
 	}
 
 	duration, err := time.ParseDuration(token)
 	if err != nil {
 		if !isBareDecimalSecondsToken(token) {
-			return 0, errInvalidDuration
+			return 0, time.Time{}, errInvalidDuration
 		}
 
 		duration, err = time.ParseDuration(token + "s")
 		if err != nil {
-			return 0, errInvalidDuration
+			return 0, time.Time{}, errInvalidDuration
 		}
 	}
 	if duration < 0 {
-		return 0, errDurationMustBeAtLeastZero
+		return 0, time.Time{}, errDurationMustBeAtLeastZero
 	}
-	return duration, nil
+	return duration, time.Time{}, nil
 }
 
 // parseWallClockTime parses wall clock time tokens and returns the duration from
@@ -217,7 +218,7 @@ func parseDurationToken(token string) (time.Duration, error) {
 // The boolean return indicates whether the token claimed to be a wall clock time at all.
 // false means no colon and no AM/PM suffix were present; the caller should try other formats.
 // A token that looks like a time but fails validation returns true with errInvalidTime.
-func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error) {
+func parseWallClockTime(token string, now time.Time) (time.Duration, time.Time, bool, error) {
 	stripped, isPM, hasSuffix := stripAMPM(token)
 
 	switch strings.ToLower(token) {
@@ -229,7 +230,7 @@ func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error
 
 	hasColon := strings.ContainsRune(stripped, ':')
 	if !hasSuffix && !hasColon {
-		return 0, false, nil
+		return 0, time.Time{}, false, nil
 	}
 
 	switch stripped {
@@ -243,7 +244,7 @@ func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error
 	if hasColon {
 		parts = strings.Split(stripped, ":")
 		if len(parts) < 2 || len(parts) > 3 {
-			return 0, true, errInvalidTime
+			return 0, time.Time{}, true, errInvalidTime
 		}
 	} else {
 		parts = []string{stripped}
@@ -256,7 +257,7 @@ func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error
 
 	hour, ok := parseTimeField(parts[0], hourRange[0], hourRange[1])
 	if !ok {
-		return 0, true, errInvalidTime
+		return 0, time.Time{}, true, errInvalidTime
 	}
 
 	min := 0
@@ -265,20 +266,20 @@ func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error
 	if len(parts) >= 2 {
 		min, ok = parseTimeField(parts[1], 0, 59)
 		if !ok {
-			return 0, true, errInvalidTime
+			return 0, time.Time{}, true, errInvalidTime
 		}
 	}
 	if len(parts) == 3 {
 		sec, ok = parseTimeField(parts[2], 0, 59)
 		if !ok {
-			return 0, true, errInvalidTime
+			return 0, time.Time{}, true, errInvalidTime
 		}
 	}
 
 	if hasSuffix {
 		hour, ok = applyAMPM(hour, isPM)
 		if !ok {
-			return 0, true, errInvalidTime
+			return 0, time.Time{}, true, errInvalidTime
 		}
 	}
 
@@ -287,7 +288,7 @@ func parseWallClockTime(token string, now time.Time) (time.Duration, bool, error
 		target = time.Date(target.Year(), target.Month(), target.Day()+1, target.Hour(), target.Minute(), target.Second(), 0, target.Location())
 	}
 
-	return target.Sub(now), true, nil
+	return target.Sub(now), target, true, nil
 }
 
 // stripAMPM removes a trailing AM or PM suffix from token, case-insensitively.

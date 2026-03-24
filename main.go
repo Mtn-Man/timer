@@ -77,13 +77,14 @@ const (
 )
 
 type invocation struct {
-	mode       invocationMode
-	duration   time.Duration
-	quiet      bool
-	noTitle    bool
-	forceAlarm bool
-	forceAwake bool
-	soundFile  string
+	mode            invocationMode
+	duration        time.Duration
+	wallClockTarget time.Time
+	quiet           bool
+	noTitle         bool
+	forceAlarm      bool
+	forceAwake      bool
+	soundFile       string
 }
 
 type cliFlag struct {
@@ -162,7 +163,7 @@ func main() {
 	}
 	sideEffectsInteractive := stdoutIsTTY()
 
-	if err := runTimer(ctx, cancel, inv.duration, status, sideEffectsInteractive, inv.quiet, inv.noTitle, inv.forceAlarm, inv.forceAwake, inv.soundFile); err != nil {
+	if err := runTimer(ctx, cancel, inv.duration, inv.wallClockTarget, status, sideEffectsInteractive, inv.quiet, inv.noTitle, inv.forceAlarm, inv.forceAwake, inv.soundFile); err != nil {
 		os.Exit(exitCodeForCancelError(err))
 	}
 }

@@ -406,6 +406,7 @@ func runParseInvocationCases(t *testing.T, tests []parseInvocationTestCase) {
 				}
 				if tc.skipDurationCheck {
 					got.duration = tc.want.duration
+					got.wallClockTarget = tc.want.wallClockTarget
 				}
 				if got != tc.want {
 					t.Fatalf("parseInvocation() = %+v, want %+v", got, tc.want)
@@ -976,7 +977,7 @@ func TestParseWallClockTime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gotDur, gotOk, gotErr := parseWallClockTime(tc.token, now)
+			gotDur, _, gotOk, gotErr := parseWallClockTime(tc.token, now)
 
 			if gotOk != tc.wantOk {
 				t.Fatalf("parseWallClockTime(%q) ok = %v, want %v", tc.token, gotOk, tc.wantOk)
@@ -1001,7 +1002,7 @@ func TestParseWallClockTime(t *testing.T) {
 func TestParseWallClockTimeNoonFuture(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2024, 3, 5, 10, 0, 0, 0, time.Local) // 10:00, before noon
-	d, ok, err := parseWallClockTime("noon", now)
+	d, _, ok, err := parseWallClockTime("noon", now)
 	if !ok || err != nil {
 		t.Fatalf("parseWallClockTime(noon) ok=%v err=%v", ok, err)
 	}
@@ -1213,7 +1214,7 @@ func TestRunTimerReturnsCancelCause(t *testing.T) {
 		interactive:      false,
 		supportsAdvanced: false,
 	}
-	err := runTimer(ctx, cancel, time.Hour, status, false, false, false, false, false, "")
+	err := runTimer(ctx, cancel, time.Hour, time.Time{}, status, false, false, false, false, false, "")
 	if err == nil {
 		t.Fatal("runTimer() error = nil, want cancellation cause")
 	}
@@ -1243,7 +1244,7 @@ func TestRunTimerWithAlarmStarter_ForceAlarmInNonTTY(t *testing.T) {
 
 	status := newStatusDisplay(io.Discard, false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, true, false, "", func(string) {
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, time.Time{}, status, false, true, false, true, false, "", func(string) {
 		alarmCalls++
 	})
 	if err != nil {
@@ -1292,7 +1293,7 @@ func TestRunTimerWithAlarmStarter_DefaultAlarmRequiresBothStreamsTTY(t *testing.
 			alarmCalls := 0
 			status := newStatusDisplay(io.Discard, tc.statusInteractive, false)
 
-			err := runTimerWithAlarmStarter(ctx, cancel, 0, status, tc.sideEffectsInteractive, false, false, false, false, "", func(string) {
+			err := runTimerWithAlarmStarter(ctx, cancel, 0, time.Time{}, status, tc.sideEffectsInteractive, false, false, false, false, "", func(string) {
 				alarmCalls++
 			})
 			if err != nil {
@@ -1499,7 +1500,7 @@ func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 	defer cancel(nil)
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, false, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, time.Time{}, status, false, false, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -1517,7 +1518,7 @@ func TestRunTimerWithAlarmStarter_NonTTYQuietSuppressesLifecycle(t *testing.T) {
 	defer cancel(nil)
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, time.Time{}, status, false, true, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -1534,7 +1535,7 @@ func TestRunTimerWithAlarmStarter_NonTTYCancelLifecycleOutput(t *testing.T) {
 
 	out, status := newCapturedStatus(false, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 10*time.Second, status, false, false, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 10*time.Second, time.Time{}, status, false, false, false, false, false, "", func(string) {})
 	if err == nil {
 		t.Fatal("runTimerWithAlarmStarter() error = nil, want cancellation cause")
 	}
@@ -1552,7 +1553,7 @@ func TestRunTimerWithAlarmStarter_InteractiveWritesToStatusWriter(t *testing.T) 
 	defer cancel(nil)
 	out, status := newCapturedStatus(true, false)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, false, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, time.Time{}, status, false, false, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}
@@ -1568,7 +1569,7 @@ func TestRunTimerWithAlarmStarter_InteractiveQuietClearsStatusLine(t *testing.T)
 	defer cancel(nil)
 	out, status := newCapturedStatus(true, true)
 
-	err := runTimerWithAlarmStarter(ctx, cancel, 0, status, false, true, false, false, false, "", func(string) {})
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, time.Time{}, status, false, true, false, false, false, "", func(string) {})
 	if err != nil {
 		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
 	}

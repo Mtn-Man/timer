@@ -12,11 +12,11 @@ import (
 	"golang.org/x/term"
 )
 
-func runTimer(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, noTitle bool, forceAlarm bool, forceAwake bool, soundFile string) error {
-	return runTimerWithAlarmStarter(ctx, cancel, duration, status, sideEffectsInteractive, quiet, noTitle, forceAlarm, forceAwake, soundFile, startAlarmProcess)
+func runTimer(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, wallClockTarget time.Time, status statusDisplay, sideEffectsInteractive bool, quiet bool, noTitle bool, forceAlarm bool, forceAwake bool, soundFile string) error {
+	return runTimerWithAlarmStarter(ctx, cancel, duration, wallClockTarget, status, sideEffectsInteractive, quiet, noTitle, forceAlarm, forceAwake, soundFile, startAlarmProcess)
 }
 
-func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, status statusDisplay, sideEffectsInteractive bool, quiet bool, noTitle bool, forceAlarm bool, forceAwake bool, soundFile string, alarmStarter func(string)) error {
+func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFunc, duration time.Duration, wallClockTarget time.Time, status statusDisplay, sideEffectsInteractive bool, quiet bool, noTitle bool, forceAlarm bool, forceAwake bool, soundFile string, alarmStarter func(string)) error {
 	bothStreamsInteractive := sideEffectsInteractive && status.interactive
 
 	if shouldStartSleepInhibitor(runtime.GOOS, sideEffectsInteractive, status.interactive, forceAwake) {
@@ -25,8 +25,16 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 		go func() { _ = cmd.Run() }() // best-effort; -w <pid> ensures caffeinate exits when we do
 	}
 
-	deadline := time.Now().Add(duration)
-	done := time.NewTimer(duration)
+	isWallClock := !wallClockTarget.IsZero()
+
+	var deadline time.Time
+	if isWallClock {
+		deadline = wallClockTarget
+	} else {
+		deadline = time.Now().Add(duration)
+	}
+
+	done := time.NewTimer(time.Until(deadline))
 	defer done.Stop()
 
 	if shouldPrintLifecycleStart(status.interactive, quiet) && ctx.Err() == nil {
@@ -38,6 +46,13 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		tickC = ticker.C
+	}
+
+	var resyncC <-chan time.Time
+	if isWallClock {
+		resync := time.NewTicker(1 * time.Second)
+		defer resync.Stop()
+		resyncC = resync.C
 	}
 
 	if status.interactive {
@@ -112,6 +127,13 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 			}
 
 			renderInteractiveCountdown(status, formatRemainingTime(remaining), noTitle)
+
+		case <-resyncC:
+			remaining := time.Until(deadline)
+			if remaining < 0 {
+				remaining = 0
+			}
+			done.Reset(remaining)
 		}
 	}
 }
