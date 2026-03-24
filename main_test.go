@@ -1511,6 +1511,25 @@ func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutput(t *testing.T) {
 	}
 }
 
+func TestRunTimerWithAlarmStarter_NonTTYLifecycleOutputWallClock(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	out, status := newCapturedStatus(false, false)
+
+	target := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC) // past time, fires immediately
+	err := runTimerWithAlarmStarter(ctx, cancel, 0, target, status, false, false, false, false, false, "", func(string) {})
+	if err != nil {
+		t.Fatalf("runTimerWithAlarmStarter() error = %v, want nil", err)
+	}
+
+	want := "after: started (until 14:30)\nafter: complete\n"
+	if got := out.String(); got != want {
+		t.Fatalf("runTimerWithAlarmStarter() output = %q, want %q", got, want)
+	}
+}
+
 func TestRunTimerWithAlarmStarter_NonTTYQuietSuppressesLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -1600,6 +1619,44 @@ func TestShouldPrintLifecycleStart(t *testing.T) {
 			got := shouldPrintLifecycleStart(tc.interactive, tc.quiet)
 			if got != tc.want {
 				t.Fatalf("shouldPrintLifecycleStart(%v, %v) = %v, want %v", tc.interactive, tc.quiet, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormatLifecycleStarted(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		duration        time.Duration
+		wallClockTarget time.Time
+		want            string
+	}{
+		{
+			name:     "duration mode",
+			duration: 5 * time.Minute,
+			want:     "after: started (5m0s)",
+		},
+		{
+			name:            "wall clock mode without seconds",
+			wallClockTarget: time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC),
+			want:            "after: started (until 14:30)",
+		},
+		{
+			name:            "wall clock mode with seconds",
+			wallClockTarget: time.Date(2024, 1, 1, 9, 5, 30, 0, time.UTC),
+			want:            "after: started (until 09:05:30)",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := formatLifecycleStarted(tc.duration, tc.wallClockTarget)
+			if got != tc.want {
+				t.Fatalf("formatLifecycleStarted() = %q, want %q", got, tc.want)
 			}
 		})
 	}

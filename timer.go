@@ -38,7 +38,7 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 	defer done.Stop()
 
 	if shouldPrintLifecycleStart(status.interactive, quiet) && ctx.Err() == nil {
-		writeStatusf(status.writer, "after: started (%s)\n", duration)
+		writeStatusln(status.writer, formatLifecycleStarted(duration, wallClockTarget))
 	}
 
 	var tickC <-chan time.Time

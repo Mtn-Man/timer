@@ -102,6 +102,17 @@ func renderHelpText() string {
 	return b.String()
 }
 
+func formatLifecycleStarted(duration time.Duration, wallClockTarget time.Time) string {
+	if !wallClockTarget.IsZero() {
+		format := "15:04"
+		if wallClockTarget.Second() != 0 {
+			format = "15:04:05"
+		}
+		return fmt.Sprintf("after: started (until %s)", wallClockTarget.Format(format))
+	}
+	return fmt.Sprintf("after: started (%s)", duration)
+}
+
 func formatVersionLine(v string) string {
 	return fmt.Sprintf("after %s\n", v)
 }
