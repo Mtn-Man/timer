@@ -157,7 +157,7 @@ after 14:30     # count down to 2:30 PM today (or tomorrow if already past)
 after 9:00      # count down to 9:00 AM today (or tomorrow if already past)
 after 9am       # count down to 9:00 AM (12-hour shorthand)
 after 2:30pm    # count down to 2:30 PM
-after "2:30 PM" # space-separated AM/PM suffix (quotes optional)
+after 2:30 PM   # space-separated AM/PM suffix
 after noon      # count down to noon
 after midnight  # count down to midnight
 after 12pm      # same as noon
@@ -168,7 +168,7 @@ after -qt 5m    # Quiet + no title bar (no alarm, no messages, no title)
 after -s 5m     # Force alarm playback even in quiet/non-TTY mode
 after -qs 5m    # Force alarm + quiet (no messages, title bar still updates)
 after -qts 5m   # Force alarm + quiet + no title bar
-after --sound-file ~/Sounds/bell.mp3 5m       # Play custom sound on completion
+after --sound-file ~/Sounds/bell.mp3 5m      # Play custom sound on completion
 after -f /System/Library/Sounds/Funk.aiff 5  # macOS: play a built-in alert sound
 after -f "~/Music/Alarm Sounds/bell.mp3" 5m  # Quoted path with spaces
 after -c 10m 2> /tmp/after.log               # Force macOS sleep inhibition in non-TTY
