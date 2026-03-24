@@ -1,6 +1,6 @@
 module github.com/Mtn-Man/after
 
-go 1.20
+go 1.23
 
 require golang.org/x/term v0.27.0
 
