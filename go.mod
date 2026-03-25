@@ -1,4 +1,4 @@
-module github.com/Mtn-Man/after
+module github.com/mtn-man/after
 
 go 1.23
 

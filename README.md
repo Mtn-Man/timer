@@ -9,7 +9,7 @@ A simple countdown timer for the terminal.
 Install and run in under a minute (requires [Homebrew](https://brew.sh)):
 
 ```bash
-brew install Mtn-Man/tools/after
+brew install mtn-man/tools/after
 after --help
 after 10m
 ```
@@ -29,7 +29,7 @@ If `after` is not found once installed, see [Troubleshooting](#troubleshooting).
 ### Install With Homebrew (Recommended)
 
 ```bash
-brew install Mtn-Man/tools/after
+brew install mtn-man/tools/after
 ```
 
 Verify:
@@ -40,7 +40,7 @@ after --version
 ### Install Prebuilt Release Binary (Tested Platforms: macOS/Linux)
 
 1. Download your platform archive and `checksums.txt` from the
-   [latest release](https://github.com/Mtn-Man/after/releases/latest).
+   [latest release](https://github.com/mtn-man/after/releases/latest).
    Replace `<version>` in the examples below with the release tag
    (for example, `vX.Y.Z`).
    Archive naming pattern:
@@ -100,17 +100,17 @@ Prerequisite: Go 1.23+ installed. Get Go: https://go.dev/dl/
 
 Install the latest version:
 ```bash
-go install github.com/Mtn-Man/after@latest
+go install github.com/mtn-man/after@latest
 ```
 
 Or install a specific release:
 ```bash
-go install github.com/Mtn-Man/after@<version>
+go install github.com/mtn-man/after@<version>
 ```
 
 Or clone and build locally:
 ```bash
-git clone https://github.com/Mtn-Man/after.git
+git clone https://github.com/mtn-man/after.git
 cd after
 go build -o after .
 ./after --version
@@ -237,8 +237,8 @@ This requires a normal interactive session by default; use
 - `Permission denied` while installing to `/usr/local/bin`: Use
   `sudo install ...` or install to `~/.local/bin` instead.
 - Homebrew command ambiguity with an existing `after` formula: use
-  `brew install Mtn-Man/tools/after` and
-  `brew info Mtn-Man/tools/after`.
+  `brew install mtn-man/tools/after` and
+  `brew info mtn-man/tools/after`.
 
 ## License
 
