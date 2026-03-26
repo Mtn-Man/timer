@@ -96,6 +96,10 @@ func quietCmd(name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
+func soundFileIgnoredForGOOS(goos string) bool {
+	return goos == "openbsd" || goos == "netbsd"
+}
+
 func alarmCandidatesForGOOS(goos string, soundFile string) []alarmCommand {
 	switch goos {
 	case "darwin":

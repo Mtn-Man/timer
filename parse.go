@@ -153,7 +153,7 @@ func expandCombinedShortFlag(arg string, knownShortFlags map[rune]cliFlag) ([]st
 	}
 
 	expanded := make([]string, 0, len(arg)-1)
-	valueFlags := make([]string, 0, 1)
+	valueFlag := ""
 
 	for _, shortRune := range arg[1:] {
 		flag, ok := knownShortFlags[shortRune]
@@ -161,17 +161,17 @@ func expandCombinedShortFlag(arg string, knownShortFlags map[rune]cliFlag) ([]st
 			return nil, false
 		}
 		if flag.takesValue {
-			valueFlags = append(valueFlags, flag.short)
+			if valueFlag != "" {
+				return nil, false
+			}
+			valueFlag = flag.short
 			continue
 		}
 		expanded = append(expanded, flag.short)
 	}
 
-	if len(valueFlags) > 1 {
-		return nil, false
-	}
-	if len(valueFlags) == 1 {
-		expanded = append(expanded, valueFlags[0])
+	if valueFlag != "" {
+		expanded = append(expanded, valueFlag)
 	}
 
 	return expanded, true

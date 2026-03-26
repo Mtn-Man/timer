@@ -146,6 +146,9 @@ func main() {
 	}
 
 	if inv.soundFile != "" {
+		if soundFileIgnoredForGOOS(runtime.GOOS) {
+			fmt.Fprintln(os.Stderr, soundFileIgnoredWarning())
+		}
 		original := inv.soundFile
 		inv.soundFile = resolveUsableSoundFilePath(inv.soundFile)
 		if inv.soundFile == "" {
@@ -200,6 +203,10 @@ func soundFileWarning(path string) string {
 	return fmt.Sprintf("Warning: sound file not found or unreadable: %s; using default alarm", path)
 }
 
+func soundFileIgnoredWarning() string {
+	return "Warning: --sound-file is not supported on this platform; using default alarm"
+}
+
 func renderInvocationError(err error) (string, int) {
 	var unknownErr unknownOptionError
 	switch {
@@ -207,12 +214,6 @@ func renderInvocationError(err error) (string, int) {
 		return fmt.Sprintf("%s\n\n%s", unknownErr.Error(), renderHelpText()), 2
 	case errors.Is(err, errUsage):
 		return usageText + "\n", 2
-	case errors.Is(err, errInvalidDuration):
-		return "Error: invalid duration format", 2
-	case errors.Is(err, errInvalidTime):
-		return "Error: invalid time format", 2
-	case errors.Is(err, errDurationMustBeAtLeastZero):
-		return "Error: duration must be >= 0", 2
 	default:
 		return fmt.Sprintf("Error: %v", err), 2
 	}

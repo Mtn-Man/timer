@@ -132,8 +132,5 @@ func resolveVersion(buildVersion, moduleVersion string) string {
 	if moduleVersion != "" && moduleVersion != develBuildInfoVersion {
 		return moduleVersion
 	}
-	if buildVersion != "" {
-		return buildVersion
-	}
 	return defaultVersion
 }

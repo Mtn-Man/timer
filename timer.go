@@ -125,10 +125,6 @@ func runTimerWithAlarmStarter(ctx context.Context, cancel context.CancelCauseFun
 			return nil
 
 		case <-tickC:
-			if !status.interactive {
-				continue
-			}
-
 			remaining := time.Until(deadline)
 
 			if remaining <= 0 {
